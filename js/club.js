@@ -5,7 +5,8 @@
 // ---------- days ----------
 function viewDays() {
   const list = days().sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
-  let h = seasonBar();
+  // Who only takes attendance works on the active season and nothing else.
+  let h = ROLE() === 'Lista' ? '<h2>Pasar lista</h2>' : seasonBar();
   if (can.editDays()) {
     h += '<div class="row"><button class="btn primary" data-act="addDay">+ Añadir día</button><button class="btn" data-act="seasonTrainings">Crear entrenamientos de la temporada</button></div>';
   }
@@ -45,6 +46,11 @@ function addDay() {
 
 function viewDay(d) {
   const lista = ROLE() === 'Lista';
+  if (lista) {
+    // Like a player, plus the list: the day as it is, nothing of it to change.
+    return '<button class="link" data-act="closeDay">‹ Volver</button><div class="card"><div class="title">' + esc(dayTitle(d)) + '</div><div class="small">'
+      + esc([fdate(d.date), d.time ? 'a las ' + d.time : '', d.side].filter(Boolean).join(' · ')) + '</div></div>' + partList(d);
+  }
   const parts = d.match && !lista ? ['Convocatoria', 'Pasar lista', 'Acta'] : ['Pasar lista'];
   if (!parts.includes(S.part)) S.part = d.match && !lista && !squad(d).length ? 'Convocatoria' : 'Pasar lista';
   const edit = can.editDays();
