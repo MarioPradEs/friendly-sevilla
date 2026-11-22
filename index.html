@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Friendly Sevilla Club</title>
+<meta name="theme-color" content="#111111">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Friendly">
+<link rel="icon" href="escudo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icono-180.png">
+<link rel="manifest" href="manifest.json">
+<style>
+:root {
+  --bg: #0e0e0e; --surface: #1d1b18; --surface2: #2a2721; --line: #3a362e;
+  --text: #f1e9d6; --muted: #b9ad92; --gold: #d9c79c; --gold-deep: #ae9968;
+  --green: #7fd18b; --orange: #f0b36a; --red: #f08a7e;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+button { font: inherit; color: inherit; cursor: pointer; }
+header { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px; padding: calc(10px + env(safe-area-inset-top)) 16px 10px; background: #151515; }
+header img { width: 32px; height: 44px; }
+header h1 { flex: 1; margin: 0; font-size: 20px; font-weight: 600; }
+.icon-btn { background: none; border: 0; padding: 8px; font-size: 20px; line-height: 1; }
+.status { padding: 4px 16px 8px; font-size: 13px; color: var(--muted); background: #151515; }
+.error { color: var(--red); }
+main { padding: 12px 16px; max-width: 640px; margin: 0 auto; }
+h2 { font-size: 18px; margin: 14px 0 8px; font-weight: 600; }
+.card { background: var(--surface); border-radius: 16px; padding: 14px; margin-bottom: 10px; }
+.card.tap { cursor: pointer; }
+.title { font-weight: 600; font-size: 17px; }
+.small { font-size: 14px; color: var(--muted); }
+.bold { font-weight: 700; color: var(--text); }
+.notice { color: var(--gold); font-weight: 700; font-size: 14px; margin-top: 4px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.btn { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 8px 16px; }
+.btn.primary { background: var(--gold-deep); border-color: var(--gold-deep); color: #111; font-weight: 600; }
+.btn.on { background: var(--gold); border-color: var(--gold); color: #111; font-weight: 600; }
+.btn:disabled { opacity: .45; }
+.link { background: none; border: 0; padding: 8px 0; color: var(--gold); text-decoration: none; display: inline-block; margin-right: 18px; }
+.line { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid #24221e; }
+.line:last-child { border-bottom: 0; }
+.paid { color: var(--green); }
+.part { color: var(--orange); }
+.total { font-weight: 700; font-size: 18px; }
+nav { position: fixed; bottom: 0; left: 0; right: 0; display: flex; background: #181715; border-top: 1px solid #24221e; padding-bottom: env(safe-area-inset-bottom); z-index: 5; }
+nav button { flex: 1; background: none; border: 0; padding: 10px 0 12px; font-size: 13px; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 2px; }
+nav button .ico { font-size: 20px; }
+nav button.on { color: var(--gold); font-weight: 600; }
+label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+input { width: 100%; font: inherit; color: var(--text); background: var(--surface2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.player { padding: 10px 0; border-bottom: 1px solid #24221e; }
+.player .name { font-weight: 600; }
+.marks { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.marks .btn { padding: 7px 12px; }
+.mark-OK.on { background: var(--green); border-color: var(--green); }
+.mark-Tarde.on { background: var(--orange); border-color: var(--orange); }
+.mark-Falta.on { background: var(--red); border-color: var(--red); }
+.mark-Nopuede.on { background: #9db7e8; border-color: #9db7e8; }
+.kit.on { background: var(--red); border-color: var(--red); color: #111; }
+#login { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px; text-align: center; }
+#login img { width: 150px; }
+#login h1 { margin: 0; font-size: 24px; }
+dialog { background: var(--surface); color: var(--text); border: 0; border-radius: 18px; padding: 18px; width: min(92vw, 420px); }
+dialog::backdrop { background: rgba(0,0,0,.6); }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.toast { position: fixed; left: 50%; bottom: calc(86px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--gold); color: #111; padding: 10px 16px; border-radius: 12px; font-weight: 600; z-index: 9; }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div id="login" class="hidden">
+  <img src="escudo.svg" alt="Escudo del Friendly Sevilla">
+  <h1>Friendly Sevilla Club</h1>
+  <div class="small">Entra con la cuenta de Google que tiene la directiva apuntada.</div>
+  <div id="gbtn"></div>
+  <div id="loginMsg" class="error"></div>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <img src="escudo.svg" alt="">
+    <h1>Friendly Sevilla</h1>
+    <button class="icon-btn" id="refresh" title="Actualizar" aria-label="Actualizar">⟳</button>
+    <button class="icon-btn" id="logout" title="Salir" aria-label="Salir">⇥</button>
+  </header>
+  <div class="status" id="status"></div>
+  <main id="view"></main>
+  <nav id="nav"></nav>
+</div>
+
+<dialog id="dlg"></dialog>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+'use strict';
+// The same Apps Script API the Android app uses: "login" with a Google ID token, then "sync".
+const API = 'https://script.google.com/macros/s/AKfycbyyqoFCGzhg2SGaucgW64WxV2d_l3ESVpqo976E8217vcF6bYh3EXYbpNKgGfevy36j1A/exec';
+const CLIENT_ID = '448275437913-m1lfv3dq2r3ecsf55s7g5v5qfckpg8ji.apps.googleusercontent.com';
+const TEAM = 'Friendly Sevilla';
+const STATES = ['OK', 'Tarde', 'Falta', 'No puede'];
+const REASONS = ['Lesión', 'Trabajo', 'Otro'];
+
+// ---------- storage (never required: the page works without it) ----------
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('fsc:' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('fsc:' + k, JSON.stringify(v)); } catch (e) { /* private mode */ } },
+  del(k) { try { localStorage.removeItem('fsc:' + k); } catch (e) { /* private mode */ } },
+};
+
+const S = {
+  token: store.get('token', null),
+  yo: store.get('yo', null),
+  datos: store.get('datos', null),
+  queue: store.get('queue', []),
+  tab: 'inicio',
+  listaDay: null,
+  syncing: false,
+  lastSync: store.get('lastSync', null),
+  error: '',
+};
+
+// ---------- helpers ----------
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad = n => (n < 10 ? '0' : '') + n;
+const ymd = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+const today = () => ymd(new Date());
+const fdate = s => { const p = String(s || '').split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : String(s || ''); };
+const cents = s => { const n = parseFloat(String(s || '').replace(',', '.')); return isNaN(n) ? 0 : Math.round(n * 100); };
+const money = c => { const e = c / 100; return (Number.isInteger(e) ? String(e) : e.toFixed(2).replace('.', ',')) + ' €'; };
+const rows = n => (S.datos && S.datos[n]) || [];
+const isTrue = v => v === 'true' || v === true;
+
+function toast(text) {
+  const t = document.createElement('div');
+  t.className = 'toast'; t.textContent = text;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2200);
+}
+
+// ---------- API ----------
+async function api(body) {
+  // text/plain keeps it a simple request, so the browser does not ask Apps Script for CORS permission first.
+  const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+async function onGoogle(resp) {
+  $('loginMsg').textContent = 'Entrando…';
+  try {
+    const a = await api({ action: 'login', idToken: resp.credential });
+    if (!a.ok) {
+      $('loginMsg').textContent = a.error === 'NO_AUTORIZADO'
+        ? 'Tu cuenta (' + (a.email || '') + ') no está dada de alta. Pide a la directiva que te añada en Usuarios.'
+        : 'No se ha podido entrar (' + a.error + ').';
+      return;
+    }
+    S.token = a.token;
+    S.yo = { email: a.email, nombre: a.nombre, rol: a.rol, jugadorId: a.jugadorId };
+    store.set('token', S.token); store.set('yo', S.yo);
+    $('loginMsg').textContent = '';
+    show();
+    sync();
+  } catch (e) {
+    $('loginMsg').textContent = 'Sin conexión con la hoja. Prueba otra vez.';
+  }
+}
+
+function logout() {
+  if (S.token) api({ action: 'logout', token: S.token }).catch(() => {});
+  ['token', 'yo', 'datos', 'queue', 'lastSync'].forEach(k => store.del(k));
+  S.token = S.yo = S.datos = null; S.queue = []; S.lastSync = null; S.tab = 'inicio';
+  show();
+}
+
+let timer = null;
+function later() { clearTimeout(timer); timer = setTimeout(sync, 700); }
+
+async function sync() {
+  if (!S.token) return;
+  if (S.syncing) { later(); return; }
+  S.syncing = true; S.error = ''; renderStatus();
+  const ops = S.queue.slice();
+  try {
+    const r = await api({ action: 'sync', token: S.token, ops: ops });
+    if (!r.ok) {
+      if (r.error === 'SESION') { S.syncing = false; logout(); $('loginMsg').textContent = 'La sesión ha caducado: vuelve a entrar.'; return; }
+      throw new Error(r.error + (r.detalle ? ': ' + r.detalle : ''));
+    }
+    S.queue = S.queue.slice(ops.length);
+    S.yo = r.yo; S.datos = r.datos; S.lastSync = Date.now();
+    // What was changed meanwhile still shows until it goes up too.
+    S.queue.forEach(applyLocal);
+    store.set('yo', S.yo); store.set('datos', S.datos); store.set('queue', S.queue); store.set('lastSync', S.lastSync);
+  } catch (e) {
+    S.error = 'Sin conexión con la hoja: lo cambiado se envía al volver a actualizar.';
+  } finally {
+    S.syncing = false;
+    render();
+    if (S.queue.length && !S.error) later();
+  }
+}
+
+const KEYS = { Avisos: ['Día ID', 'Jugador ID'], Convocatorias: ['Partido ID', 'Jugador ID'] };
+const keyOf = (t, v) => (KEYS[t] || ['ID']).map(c => v[c]).join('|');
+
+function applyLocal(o) {
+  if (!S.datos) return;
+  const list = S.datos[o.t] || (S.datos[o.t] = []);
+  const k = keyOf(o.t, o.v);
+  const i = list.findIndex(r => keyOf(o.t, r) === k);
+  if (o.op === 'd') { if (i >= 0) list.splice(i, 1); return; }
+  if (i >= 0) list[i] = Object.assign({}, list[i], o.v);
+  else if (o.op === 'u') list.push(Object.assign({}, o.v));
+}
+
+function send(o) {
+  S.queue.push(o); store.set('queue', S.queue);
+  applyLocal(o); store.set('datos', S.datos);
+  render(); later();
+}
+
+// ---------- model ----------
+function activeSeason() { const t = rows('Temporadas').find(r => isTrue(r['Activa'])); return t ? t['Nombre'] : ''; }
+const inSeason = r => { const a = activeSeason(); return !a || !r['Temporada'] || r['Temporada'] === a; };
+
+function players() {
+  return rows('Jugadores').filter(p => isTrue(p['Activo']))
+    .sort((a, b) => (Number(a['Dorsal']) || 999) - (Number(b['Dorsal']) || 999) || String(a['Nombre']).localeCompare(b['Nombre']));
+}
+const playerName = id => { const p = rows('Jugadores').find(r => r['ID'] === id); return p ? p['Nombre'] : id; };
+
+function days() {
+  const t = rows('Entrenamientos').filter(r => r['ID'] && r['Fecha']).map(r => ({
+    id: r['ID'], date: r['Fecha'], match: false, label: 'Entrenamiento', session: 'Entrenamiento',
+    title: r['Notas'] || '', time: r['Hora'] || '', meet: '', season: r['Temporada'] || '', row: r,
+  }));
+  const m = rows('Partidos').filter(r => r['ID'] && r['Fecha']).map(r => {
+    const kind = r['Tipo'] === 'Amistoso' ? ['Amistoso', 'Amistoso'] : r['Tipo'] === 'Torneo' ? ['Evento o torneo', 'Torneo'] : ['Partido', 'Partido'];
+    return {
+      id: r['ID'], date: r['Fecha'], match: true, label: kind[0], session: kind[1], title: r['Rival'] || '',
+      time: r['Hora partido'] || '', meet: r['Hora convocatoria'] || '', side: r['Local/Visitante'] || '',
+      ground: r['Campo'] || '', address: r['Dirección'] || '', maps: r['URL Google Maps'] || '', kit: r['Equipación'] || '',
+      confirmed: isTrue(r['Convocatoria confirmada']), gf: r['Goles a favor'] || '', ga: r['Goles en contra'] || '',
+      season: r['Temporada'] || '', row: r,
+    };
+  });
+  return t.concat(m).filter(d => inSeason(d.row));
+}
+const squad = d => rows('Convocatorias').filter(c => c['Partido ID'] === d.id).map(c => c['Jugador ID']);
+const noticeOf = (dayId, pid) => rows('Avisos').find(a => a['Día ID'] === dayId && a['Jugador ID'] === pid);
+const marksOf = dayId => rows('Asistencia').filter(a => a['Día ID'] === dayId);
+const dayTitle = d => [d.label, d.title.trim()].filter(Boolean).join(' · ');
+
+function noticeText(n) {
+  if (n['Tipo'] === 'No puedo ir') return 'Has avisado: no puedes ir' + (n['Motivo'] ? ' (' + n['Motivo'] + ')' : '');
+  return 'Has avisado: llegas tarde' + (n['Hora llegada'] ? ', sobre las ' + n['Hora llegada'] : '') + (n['Motivo'] ? ' (' + n['Motivo'] + ')' : '');
+}
+
+/** Each fine with what has been paid of it (instalments and money taken from credit). */
+function fines(pid) {
+  const byFine = {};
+  rows('Contabilidad').forEach(m => { if (m['Multa ID']) byFine[m['Multa ID']] = (byFine[m['Multa ID']] || 0) + cents(m['Importe']); });
+  return rows('Multas').filter(f => f['Jugador ID'] === pid).map(f => {
+    const amount = cents(f['Importe']), paid = byFine[f['ID']] || 0;
+    const done = isTrue(f['Pagada']) || (paid > 0 && paid >= amount);
+    return {
+      id: f['ID'], date: f['Fecha'], season: f['Temporada'] || '', amount: amount, paid: paid,
+      rest: done ? 0 : Math.max(amount - paid, 0),
+      label: f['Motivo'] === 'Otro' && f['Notas'] ? f['Notas'] : (f['Motivo'] || 'Multa'),
+    };
+  });
+}
+
+/**
+ * Same rule as the app: a payment made for a charge counts for it; money given without saying what for
+ * (or more than a charge needed) pays the oldest charges first, and what is left stays in his favour.
+ */
+function ledger(pid) {
+  const charges = rows('Cargos').filter(c => c['Jugador ID'] === pid)
+    .sort((a, b) => String(a['Temporada']).localeCompare(String(b['Temporada'])) || String(a['Fecha']).localeCompare(String(b['Fecha'])) || String(a['ID']).localeCompare(String(b['ID'])));
+  const mine = rows('Contabilidad').filter(m => m['Jugador ID'] === pid);
+  const incomes = mine.filter(m => m['Tipo'] === 'Ingreso' && !m['Multa ID'] && m['Categoría'] !== 'Multa');
+  const known = new Set(charges.map(c => c['ID']));
+  const linked = {};
+  incomes.forEach(m => { if (known.has(m['Cargo ID'])) linked[m['Cargo ID']] = (linked[m['Cargo ID']] || 0) + cents(m['Importe']); });
+  const spent = mine.filter(m => m['Tipo'] === 'Traspaso').reduce((s, m) => s + cents(m['Importe']), 0);
+  let credit = incomes.filter(m => !known.has(m['Cargo ID'])).reduce((s, m) => s + cents(m['Importe']), 0) - spent;
+  const paid = {};
+  charges.forEach(c => { const got = linked[c['ID']] || 0, amt = cents(c['Importe']); paid[c['ID']] = Math.min(got, amt); if (got > amt) credit += got - amt; });
+  charges.forEach(c => {
+    const use = Math.min(credit, cents(c['Importe']) - paid[c['ID']]);
+    if (use > 0) { paid[c['ID']] += use; credit -= use; }
+  });
+  return {
+    charges: charges.map(c => ({ id: c['ID'], category: c['Categoría'], concept: c['Concepto'], season: c['Temporada'] || '', amount: cents(c['Importe']), paid: paid[c['ID']] })),
+    credit: Math.max(credit, 0),
+  };
+}
+
+// ---------- views ----------
+function renderStatus() {
+  if (!S.yo) return;
+  const when = S.lastSync ? new Date(S.lastSync) : null;
+  const parts = [S.yo.nombre || S.yo.email];
+  if (S.syncing) parts.push('Sincronizando…');
+  else if (S.queue.length) parts.push('Pendiente de enviar');
+  else if (when) parts.push('Al día · ' + pad(when.getDate()) + '/' + pad(when.getMonth() + 1) + ' ' + pad(when.getHours()) + ':' + pad(when.getMinutes()));
+  $('status').innerHTML = esc(parts.filter(Boolean).join(' · ')) + (S.error ? '<div class="error">' + esc(S.error) + '</div>' : '');
+}
+
+const canList = () => S.yo && (S.yo.rol === 'Lista' || S.yo.rol === 'Directiva');
+
+function renderNav() {
+  const tabs = [['inicio', '⌂', 'Inicio'], ['pagos', '€', 'Pagos'], ['perfil', '☺', 'Mi perfil']];
+  if (canList()) tabs.push(['lista', '✓', 'Lista']);
+  if (!tabs.some(t => t[0] === S.tab)) S.tab = 'inicio';
+  $('nav').innerHTML = tabs.map(t => '<button data-tab="' + t[0] + '" class="' + (S.tab === t[0] ? 'on' : '') + '"><span class="ico">' + t[1] + '</span>' + t[2] + '</button>').join('');
+}
+
+function render() {
+  if (!S.token) return;
+  renderStatus(); renderNav();
+  if (!S.datos) { $('view').innerHTML = '<p class="small">Cargando los datos de la hoja…</p>'; return; }
+  const v = { inicio: viewHome, pagos: viewMoney, perfil: viewProfile, lista: viewList }[S.tab] || viewHome;
+  $('view').innerHTML = v();
+}
+
+function viewHome() {
+  const me = S.yo.jugadorId;
+  const t = today();
+  const all = days();
+  const upcoming = all.filter(d => d.date >= t).sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+  let h = '';
+  if (!me) h += '<p class="small">Tu cuenta no está unida a ningún jugador. Pide a la directiva que ponga tu Jugador ID en la pestaña Usuarios.</p>';
+  h += '<h2>Próximos días</h2>';
+  if (!upcoming.length) h += '<p class="small">No hay nada apuntado todavía.</p>';
+  upcoming.forEach(d => {
+    const sq = d.match ? squad(d) : [];
+    const called = !!me && sq.indexOf(me) >= 0;
+    // The squad is only shown once the coach or the directiva confirm it.
+    const confirmed = d.match && d.confirmed && sq.length > 0;
+    const n = me ? noticeOf(d.id, me) : null;
+    h += '<div class="card"><div class="title">' + esc(dayTitle(d)) + '</div>';
+    h += '<div class="small">' + esc([fdate(d.date), d.time ? 'a las ' + d.time : '', d.side].filter(Boolean).join(' · ')) + '</div>';
+    if (d.meet) h += '<div class="small">Convocatoria: ' + esc(d.meet) + '</div>';
+    if (d.ground) h += '<div class="small">' + esc(d.ground + (d.address ? ' · ' + d.address : '')) + '</div>';
+    if (d.match && me) h += '<div class="small bold">' + (!confirmed ? 'Convocatoria aún sin confirmar' : called ? 'Estás convocado' : 'No estás convocado') + '</div>';
+    if (confirmed && called) {
+      if (d.kit) h += '<div class="small bold">Juegas con la equipación ' + esc(d.kit) + '</div>';
+      h += '<div class="small">Lleva siempre las dos equipaciones.</div>';
+    }
+    if (confirmed) {
+      const names = players().filter(p => sq.indexOf(p['ID']) >= 0).map(p => (p['Dorsal'] ? '#' + p['Dorsal'] + ' ' : '') + p['Nombre']);
+      h += '<div class="small">Convocados (' + names.length + '): ' + esc(names.join(', ')) + '</div>';
+    }
+    if (n) h += '<div class="notice">' + esc(noticeText(n)) + '</div>';
+    // Before the squad is confirmed anyone can warn; after, in a match only the squad warns.
+    if (me && (!d.match || !confirmed || called)) {
+      h += '<div class="row"><button class="btn" data-warn="No puedo ir" data-day="' + esc(d.id) + '">No puedo ir</button>'
+        + '<button class="btn" data-warn="Llego tarde" data-day="' + esc(d.id) + '">Llego tarde</button></div>';
+    }
+    h += '<div>';
+    if (n) h += '<button class="link" data-unwarn="' + esc(d.id) + '">Quitar aviso</button>';
+    if (/^https:\/\//.test(d.maps || '')) h += '<a class="link" href="' + esc(d.maps) + '" target="_blank" rel="noopener">Cómo llegar</a>';
+    h += '<button class="link" data-ics="' + esc(d.id) + '">Añadir al calendario</button></div></div>';
+  });
+  const played = all.filter(d => d.match && d.date < t && d.gf !== '').sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+  if (played.length) {
+    h += '<h2>Últimos resultados</h2>';
+    played.forEach(d => {
+      const goals = rows('Acta').filter(x => x['Partido ID'] === d.id && x['Tipo'] === 'Gol').map(x => playerName(x['Jugador ID']));
+      h += '<div class="card"><div class="title">' + esc(TEAM + ' ' + d.gf + ' – ' + d.ga + ' ' + d.title) + '</div>'
+        + '<div class="small">' + esc([fdate(d.date), goals.length ? 'Goles: ' + goals.join(', ') : ''].filter(Boolean).join(' · ')) + '</div></div>';
+    });
+  }
+  return h;
+}
+
+function viewMoney() {
+  const me = S.yo.jugadorId;
+  if (!me) return '<p class="small">Tu cuenta no está unida a ningún jugador.</p>';
+  const active = activeSeason();
+  const all = fines(me);
+  const led = ledger(me);
+  const owedCharges = led.charges.filter(c => c.paid < c.amount);
+  const owedFines = all.filter(f => f.rest > 0);
+  const total = owedCharges.reduce((s, c) => s + c.amount - c.paid, 0) + owedFines.reduce((s, f) => s + f.rest, 0);
+  const tag = s => (s && active && s !== active ? ' · ' + s : '');
+  const part = (paid, amount) => (paid ? money(paid) + ' de ' + money(amount) : money(amount));
+  let h = '<div class="card"><div class="title">Lo que debo</div>';
+  if (!owedCharges.length && !owedFines.length) h += '<div class="small paid">Estás al día.</div>';
+  owedCharges.forEach(c => {
+    h += '<div class="line"><span>' + esc([c.category, c.concept].filter(Boolean).join(' · ') + tag(c.season)) + '</span><span class="' + (c.paid ? 'part' : 'bold') + '">' + part(c.paid, c.amount) + '</span></div>';
+  });
+  owedFines.forEach(f => {
+    h += '<div class="line"><span>Multa: ' + esc(f.label + ' · ' + fdate(f.date) + tag(f.season)) + '</span><span class="' + (f.paid ? 'part' : 'bold') + '">' + part(f.paid, f.amount) + '</span></div>';
+  });
+  if (total) h += '<div class="line total"><span>Total</span><span>' + money(total) + '</span></div>';
+  if (led.credit) h += '<div class="line"><span class="paid">A favor</span><span class="paid">' + money(led.credit) + '</span></div>';
+  h += '</div>';
+  const paidCharges = led.charges.filter(c => c.amount > 0 && c.paid >= c.amount);
+  if (paidCharges.length) {
+    h += '<h2>Pagado</h2><div class="card">';
+    paidCharges.forEach(c => { h += '<div class="line"><span>' + esc([c.category, c.concept].filter(Boolean).join(' · ') + tag(c.season)) + '</span><span class="paid">' + money(c.amount) + ' ✓</span></div>'; });
+    h += '</div>';
+  }
+  const mov = rows('Contabilidad').filter(m => m['Jugador ID'] === me);
+  const pays = mov.filter(m => m['Tipo'] === 'Ingreso').sort((a, b) => String(b['Fecha']).localeCompare(a['Fecha']));
+  if (pays.length) {
+    h += '<h2>Mis pagos</h2><div class="card">';
+    pays.forEach(m => { h += '<div class="line"><span>' + esc([m['Categoría'], m['Concepto'], fdate(m['Fecha'])].filter(Boolean).join(' · ')) + '</span><span>' + money(cents(m['Importe'])) + '</span></div>'; });
+    h += '</div>';
+  }
+  const used = mov.filter(m => m['Tipo'] === 'Traspaso').sort((a, b) => String(b['Fecha']).localeCompare(a['Fecha']));
+  if (used.length) {
+    h += '<h2>Pagado con mi saldo</h2><div class="card">';
+    used.forEach(m => { h += '<div class="line"><span>' + esc([String(m['Concepto'] || '').replace('(de su saldo)', '').trim(), fdate(m['Fecha'])].filter(Boolean).join(' · ')) + '</span><span>−' + money(cents(m['Importe'])) + '</span></div>'; });
+    h += '</div>';
+  }
+  const season = all.filter(f => !active || !f.season || f.season === active).sort((a, b) => String(b.date).localeCompare(a.date));
+  h += '<h2>Mis multas · debo ' + money(season.reduce((s, f) => s + f.rest, 0)) + '</h2><div class="card">';
+  if (!season.length) h += '<div class="small">No tienes multas.</div>';
+  season.forEach(f => {
+    h += '<div class="line"><span>' + esc(f.label + ' · ' + fdate(f.date)) + '</span><span class="' + (f.rest === 0 ? 'paid' : f.paid ? 'part' : 'bold') + '">'
+      + (f.rest === 0 ? money(f.amount) + ' pagada' : part(f.paid, f.amount)) + '</span></div>';
+  });
+  return h + '</div>';
+}
+
+const PROFILE = [['Apodo', 'Apodo', 'text'], ['Teléfono', 'Teléfono', 'tel'], ['Nacimiento', 'Fecha de nacimiento', 'date'],
+  ['Talla camiseta', 'Talla camiseta', 'text'], ['Talla pantalón', 'Talla pantalón', 'text'], ['Posición preferida', 'Posición preferida', 'text'],
+  ['Contacto emergencia', 'Contacto de emergencia (nombre y teléfono)', 'text']];
+
+function viewProfile() {
+  const me = S.yo.jugadorId;
+  const p = rows('Jugadores').find(r => r['ID'] === me);
+  if (!p) return '<p class="small">Tu cuenta no está unida a ningún jugador. Pide a la directiva que ponga tu Jugador ID en la pestaña Usuarios.</p>';
+  let h = '<div class="card"><div class="title">' + esc((p['Dorsal'] ? '#' + p['Dorsal'] + ' ' : '') + p['Nombre']) + '</div><div class="small">' + esc(p['Posición'] || '') + '</div></div>';
+  h += '<p class="small">El nombre y el dorsal los cambia la directiva. Teléfono, nacimiento y contacto de emergencia solo los ven la directiva y el entrenador.</p><form id="profile">';
+  PROFILE.forEach(f => { h += '<label for="pf-' + esc(f[0]) + '">' + esc(f[1]) + '</label><input id="pf-' + esc(f[0]) + '" name="' + esc(f[0]) + '" type="' + f[2] + '" value="' + esc(p[f[0]] || '') + '" maxlength="80">'; });
+  return h + '<div class="row"><button class="btn primary" type="submit">Guardar mis datos</button></div></form>';
+}
+
+function viewList() {
+  if (S.listaDay) {
+    const d = days().find(x => x.id === S.listaDay);
+    if (d) return viewListDay(d);
+    S.listaDay = null;
+  }
+  const from = new Date(); from.setDate(from.getDate() - 45);
+  const t = today(), min = ymd(from);
+  const list = days().filter(d => d.date <= t && d.date >= min).sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
+  let h = '<h2>Pasar lista</h2>';
+  if (!list.length) h += '<p class="small">No hay días de hoy ni de las últimas semanas.</p>';
+  list.forEach(d => {
+    const who = listPlayers(d);
+    const marked = marksOf(d.id).filter(m => who.indexOf(m['Jugador ID']) >= 0).length;
+    const info = d.match && !who.length ? 'Esperando la convocatoria' : (who.length - marked) + ' sin marcar';
+    h += '<div class="card tap" data-open="' + esc(d.id) + '"><div class="title">' + esc(dayTitle(d)) + '</div><div class="small">' + esc(fdate(d.date) + (d.time ? ' · ' + d.time : '')) + '</div><div class="small bold">' + esc(info) + '</div></div>';
+  });
+  return h;
+}
+
+/** At a training everyone in the squad; at a match only the called-up. */
+function listPlayers(d) {
+  const active = players().map(p => p['ID']);
+  if (!d.match) return active;
+  const sq = squad(d);
+  return active.filter(id => sq.indexOf(id) >= 0);
+}
+
+function viewListDay(d) {
+  const who = listPlayers(d);
+  const marks = {};
+  marksOf(d.id).forEach(m => { marks[m['Jugador ID']] = m; });
+  let h = '<button class="link" data-back="1">‹ Volver</button><div class="card"><div class="title">' + esc(dayTitle(d)) + '</div><div class="small">' + esc(fdate(d.date) + (d.time ? ' · ' + d.time : '')) + '</div></div>';
+  if (d.match && !who.length) return h + '<p class="small">Esperando la convocatoria del entrenador.</p>';
+  const left = who.filter(id => !marks[id]).length;
+  h += '<div class="line"><span>' + left + ' sin marcar</span>' + (left ? '<button class="link" data-allok="' + esc(d.id) + '">Poner OK al resto</button>' : '') + '</div>';
+  who.forEach(id => {
+    const m = marks[id];
+    const n = noticeOf(d.id, id);
+    h += '<div class="player"><div class="name">' + esc(playerName(id)) + '</div>';
+    if (n) h += '<div class="small">Avisó: ' + esc(n['Tipo'] === 'No puedo ir' ? 'no puede ir' + (n['Motivo'] ? ' (' + n['Motivo'] + ')' : '') : 'llega tarde' + (n['Hora llegada'] ? ', sobre las ' + n['Hora llegada'] : '')) + '</div>';
+    h += '<div class="marks">';
+    STATES.forEach(s => {
+      const on = m && m['Estado'] === s;
+      h += '<button class="btn mark-' + s.replace(' ', '') + (on ? ' on' : '') + '" data-mark="' + esc(s) + '" data-pid="' + esc(id) + '" data-day="' + esc(d.id) + '">' + esc(s) + '</button>';
+    });
+    if (m) h += '<button class="btn kit' + (isTrue(m['Equipación incorrecta']) ? ' on' : '') + '" data-kit="' + esc(id) + '" data-day="' + esc(d.id) + '">Equipación</button>';
+    h += '</div></div>';
+  });
+  return h;
+}
+
+// ---------- actions ----------
+function mark(dayId, pid, state) {
+  const d = days().find(x => x.id === dayId);
+  if (!d) return;
+  const id = dayId + '_' + pid;
+  const cur = rows('Asistencia').find(a => a['ID'] === id);
+  // Tapping the mark it already has takes it off.
+  if (cur && cur['Estado'] === state) { send({ t: 'Asistencia', op: 'd', v: { 'ID': id } }); return; }
+  if (cur) { send({ t: 'Asistencia', op: 'e', v: { 'ID': id, 'Estado': state } }); return; }
+  const n = noticeOf(dayId, pid);
+  send({ t: 'Asistencia', op: 'u', v: {
+    'ID': id, 'Fecha': d.date, 'Sesión': d.session, 'Día ID': dayId, 'Jugador ID': pid, 'Estado': state,
+    'Motivo': state === 'No puede' && n && n['Tipo'] === 'No puedo ir' ? (n['Motivo'] || '') : '',
+    'Justificada': 'false', 'Equipación incorrecta': 'false', 'Temporada': d.season,
+  } });
+}
+
+function allOk(dayId) {
+  const d = days().find(x => x.id === dayId);
+  if (!d) return;
+  const marked = new Set(marksOf(dayId).map(m => m['Jugador ID']));
+  listPlayers(d).filter(id => !marked.has(id)).forEach(id => mark(dayId, id, 'OK'));
+}
+
+function toggleKit(dayId, pid) {
+  const id = dayId + '_' + pid;
+  const cur = rows('Asistencia').find(a => a['ID'] === id);
+  if (cur) send({ t: 'Asistencia', op: 'e', v: { 'ID': id, 'Equipación incorrecta': isTrue(cur['Equipación incorrecta']) ? 'false' : 'true' } });
+}
+
+function warnDialog(dayId, type) {
+  const me = S.yo.jugadorId;
+  const d = days().find(x => x.id === dayId);
+  if (!d) return;
+  const cur = noticeOf(dayId, me);
+  const same = cur && cur['Tipo'] === type ? cur : null;
+  let reason = same ? same['Motivo'] || '' : '';
+  const dlg = $('dlg');
+  let h = '<form method="dialog"><div class="title">' + esc(type) + '</div><div class="small">' + esc(dayTitle(d) + ' · ' + fdate(d.date)) + '</div>';
+  if (type === 'No puedo ir') {
+    h += '<label>Motivo</label><div class="chips">' + REASONS.map(r => '<button type="button" class="btn' + (reason === r ? ' on' : '') + '" data-reason="' + r + '">' + r + '</button>').join('') + '</div>';
+  } else {
+    h += '<label for="arrival">Hora aproximada de llegada</label><input id="arrival" type="time" value="' + esc(same ? same['Hora llegada'] || '' : '') + '">'
+      + '<label for="lateReason">Motivo (opcional)</label><input id="lateReason" maxlength="80" value="' + esc(reason) + '">'
+      + '<p class="small">Si avisas antes de la hora, el retraso cuenta como justificado y sin multa.</p>';
+  }
+  h += '<div class="row" style="justify-content:flex-end"><button class="btn" value="cancel">Cancelar</button><button class="btn primary" id="warnOk" value="ok"' + (type === 'No puedo ir' && !reason ? ' disabled' : '') + '>Avisar</button></div></form>';
+  dlg.innerHTML = h;
+  dlg.onclick = e => {
+    const r = e.target.closest('[data-reason]');
+    if (!r) return;
+    reason = r.dataset.reason;
+    dlg.querySelectorAll('[data-reason]').forEach(b => b.classList.toggle('on', b === r));
+    $('warnOk').disabled = false;
+  };
+  dlg.onclose = () => {
+    if (dlg.returnValue !== 'ok') return;
+    const arrival = type === 'Llego tarde' ? $('arrival').value : '';
+    const why = type === 'Llego tarde' ? $('lateReason').value.trim() : reason;
+    send({ t: 'Avisos', op: 'u', v: { 'Día ID': dayId, 'Fecha': d.date, 'Jugador ID': me, 'Tipo': type, 'Hora llegada': arrival, 'Motivo': why, 'Temporada': d.season } });
+    toast('Aviso enviado');
+  };
+  dlg.returnValue = '';
+  dlg.showModal();
+}
+
+function calendar(dayId) {
+  const d = days().find(x => x.id === dayId);
+  if (!d) return;
+  const day = d.date.replace(/-/g, '');
+  const start = d.meet || d.time;
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Friendly Sevilla Club//ES', 'BEGIN:VEVENT',
+    'UID:' + d.id + '@friendlysevillaclub', 'DTSTAMP:' + new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z'];
+  if (/^\d{2}:\d{2}$/.test(start)) {
+    const hh = Number(start.slice(0, 2)), mm = start.slice(3);
+    lines.push('DTSTART:' + day + 'T' + pad(hh) + mm + '00', 'DTEND:' + day + 'T' + pad(Math.min(hh + 2, 23)) + mm + '00');
+  } else {
+    const n = new Date(d.date + 'T12:00:00'); n.setDate(n.getDate() + 1);
+    lines.push('DTSTART;VALUE=DATE:' + day, 'DTEND;VALUE=DATE:' + ymd(n).replace(/-/g, ''));
+  }
+  const clean = s => String(s).replace(/[\\;,]/g, m => '\\' + m).replace(/\n/g, ' ');
+  lines.push('SUMMARY:' + clean(TEAM + ' · ' + dayTitle(d)));
+  if (d.ground || d.address) lines.push('LOCATION:' + clean([d.ground, d.address].filter(Boolean).join(', ')));
+  lines.push('END:VEVENT', 'END:VCALENDAR');
+  const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'friendly-' + d.date + '.ics';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('button, .card.tap');
+  if (!b || b.closest('dialog')) return;
+  const ds = b.dataset;
+  if (ds.tab) { S.tab = ds.tab; S.listaDay = null; render(); window.scrollTo(0, 0); }
+  else if (ds.warn) warnDialog(ds.day, ds.warn);
+  else if (ds.unwarn) { if (confirm('¿Quitar tu aviso?')) send({ t: 'Avisos', op: 'd', v: { 'Día ID': ds.unwarn, 'Jugador ID': S.yo.jugadorId } }); }
+  else if (ds.ics) calendar(ds.ics);
+  else if (ds.open) { S.listaDay = ds.open; render(); window.scrollTo(0, 0); }
+  else if (ds.back) { S.listaDay = null; render(); }
+  else if (ds.mark) mark(ds.day, ds.pid, ds.mark);
+  else if (ds.kit) toggleKit(ds.day, ds.kit);
+  else if (ds.allok) { if (confirm('¿Poner OK a todos los que quedan sin marcar?')) allOk(ds.allok); }
+});
+
+document.addEventListener('submit', e => {
+  if (e.target.id !== 'profile') return;
+  e.preventDefault();
+  const me = S.yo.jugadorId;
+  const p = rows('Jugadores').find(r => r['ID'] === me) || {};
+  const v = { 'ID': me };
+  let changed = false;
+  PROFILE.forEach(f => { const val = e.target.elements[f[0]].value.trim(); if (val !== (p[f[0]] || '')) { v[f[0]] = val; changed = true; } });
+  if (!changed) { toast('No hay cambios'); return; }
+  send({ t: 'Jugadores', op: 'e', v: v });
+  toast('Guardado. Se envía a la hoja en unos segundos.');
+});
+
+$('refresh').onclick = () => sync();
+$('logout').onclick = () => { if (confirm('¿Salir de tu cuenta en este móvil?')) logout(); };
+window.addEventListener('online', () => sync());
+document.addEventListener('visibilitychange', () => { if (!document.hidden && S.token && Date.now() - (S.lastSync || 0) > 60000) sync(); });
+
+function startGoogle() {
+  if (!window.google || !google.accounts) { setTimeout(startGoogle, 200); return; }
+  google.accounts.id.initialize({ client_id: CLIENT_ID, callback: onGoogle, ux_mode: 'popup', auto_select: false });
+  google.accounts.id.renderButton($('gbtn'), { theme: 'filled_black', size: 'large', text: 'signin_with', shape: 'pill', locale: 'es' });
+}
+
+function show() {
+  $('login').classList.toggle('hidden', !!S.token);
+  $('app').classList.toggle('hidden', !S.token);
+  if (S.token) render(); else startGoogle();
+}
+
+show();
+if (S.token) sync();
+</script>
+</body>
+</html>
