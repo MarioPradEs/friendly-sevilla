@@ -68,7 +68,10 @@ function viewMoney() {
   const owedFines = mineAll.filter(f => f.rest > 0);
   const total = owedCharges.reduce((s, c) => s + c.rest, 0) + owedFines.reduce((s, f) => s + f.rest, 0);
   const tag = s => (s && active && s !== active ? ' · ' + s : '');
-  let h = '<div class="card"><div class="title">Lo que debo</div>';
+  let h = '';
+  // The coach sees only fines: fees and debts are for the board.
+  if (ROLE() !== 'Entrenador') {
+  h += '<div class="card"><div class="title">Lo que debo</div>';
   if (!owedCharges.length && !owedFines.length) h += '<div class="small paid">Estás al día.</div>';
   owedCharges.forEach(c => {
     h += '<div class="line"><span>' + esc([c.category, c.concept].filter(Boolean).join(' · ') + tag(c.season)) + '</span><span class="' + payClass(c.rest, c.paid) + '">' + paidText(c.amount, c.rest) + '</span></div>';
@@ -97,6 +100,7 @@ function viewMoney() {
     h += '<h2>Pagado con mi saldo</h2><div class="card">';
     used.forEach(m => { h += '<div class="line"><span>' + esc([String(m['Concepto'] || '').replace('(de su saldo)', '').trim(), fdate(m['Fecha'])].filter(Boolean).join(' · ')) + '</span><span>−' + money(cents(m['Importe'])) + '</span></div>'; });
     h += '</div>';
+  }
   }
   const season = mineAll.filter(f => !active || seasonOf(f.row) === active).sort((a, b) => String(b.date).localeCompare(a.date));
   h += '<h2>Mis multas · debo ' + money(season.reduce((s, f) => s + f.rest, 0)) + '</h2><div class="card">';

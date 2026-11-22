@@ -40,7 +40,7 @@ function render() {
     h = d ? viewDay(d) : viewDays();
   } else if (S.tab === 'yo') {
     S.sub = S.sub || 'inicio';
-    h = '<div class="chips">' + [['inicio', 'Inicio'], ['pagos', 'Mis pagos'], ['perfil', 'Mi perfil']].map(x => '<button class="btn' + (S.sub === x[0] ? ' on' : '') + '" data-act="sub" data-sub="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>'
+    h = '<div class="chips">' + [['inicio', 'Inicio'], ['pagos', ROLE() === 'Entrenador' ? 'Mis multas' : 'Mis pagos'], ['perfil', 'Mi perfil']].map(x => '<button class="btn' + (S.sub === x[0] ? ' on' : '') + '" data-act="sub" data-sub="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>'
       + PORTAL[S.sub]();
   } else {
     h = ({ inicio: viewHome, pagos: viewMoney, perfil: viewProfile, multas: viewFines, plantilla: viewSquad, resumen: viewSummary, cuentas: viewAccounts }[S.tab] || viewHome)();
