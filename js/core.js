@@ -91,7 +91,13 @@ const can = {
 };
 
 // ---------- API ----------
+// Android phones are offered the app; the sheet notes "web" as the version of whoever uses this page.
+const ANDROID = /Android/i.test(navigator.userAgent);
+const APK_URL = 'android/FriendlySevillaClub.apk';
+const androidLink = () => (ANDROID ? '<a class="btn primary wide app-link" href="' + APK_URL + '">📲 Descargar app para Android</a>' : '');
+
 async function api(body) {
+  body = Object.assign({ version: 'web' }, body);
   // text/plain keeps it a simple request, so the browser does not ask Apps Script for CORS permission first.
   const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
   if (!r.ok) throw new Error('HTTP ' + r.status);

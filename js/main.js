@@ -41,7 +41,7 @@ function render() {
   } else if (S.tab === 'yo') {
     S.sub = S.sub || 'inicio';
     h = '<div class="chips">' + [['inicio', 'Inicio'], ['pagos', ROLE() === 'Entrenador' ? 'Mis multas' : 'Mis pagos'], ['perfil', 'Mi perfil']].map(x => '<button class="btn' + (S.sub === x[0] ? ' on' : '') + '" data-act="sub" data-sub="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>'
-      + PORTAL[S.sub]();
+      + androidLink() + PORTAL[S.sub]();
   } else {
     h = ({ inicio: viewHome, pagos: viewMoney, perfil: viewProfile, multas: viewFines, plantilla: viewSquad, resumen: viewSummary, cuentas: viewAccounts }[S.tab] || viewHome)();
   }
@@ -249,6 +249,7 @@ function show() {
   $('app').classList.toggle('hidden', !S.token);
   if (S.token) { render(); return; }
   if (!$('loginName').value) $('loginName').value = store.get('loginName', '');
+  $('loginApp').innerHTML = androidLink();
   startGoogle();
 }
 
