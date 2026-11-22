@@ -8,6 +8,16 @@ function viewHome() {
   const upcoming = all.filter(d => d.date >= t).sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
   let h = '';
   if (!me) h += '<p class="small">Tu cuenta no está unida a ningún jugador. Pide a la directiva que ponga tu Jugador ID en la pestaña Usuarios.</p>';
+  // What the player still owes in fines, to be paid before the next match.
+  const owed = me ? fines(f => f.player === me).reduce((s, f) => s + f.rest, 0) : 0;
+  if (owed > 0) h += '<div class="card"><span class="bold warn">Llevas ' + money(owed) + ' sin pagar en multas. Págalas antes del próximo partido.</span></div>';
+  // The next match, big, at the top: who against, when, what to wear and how to get there.
+  const nextMatch = upcoming.find(d => d.match && d.gf === '');
+  if (nextMatch) h += nextMatchCard(nextMatch);
+  // Matches still being voted, where this player was called up.
+  if (me) allDays().filter(d => voteOpen(d) && squad(d).includes(me)).forEach(d => { h += voteCard(d, me); });
+  h += birthdayCard();
+  if (me) h += attendanceCard(me);
   h += '<h2>Próximos días</h2>';
   if (!upcoming.length) h += '<p class="small">No hay nada apuntado todavía.</p>';
   upcoming.forEach(d => {
@@ -17,7 +27,7 @@ function viewHome() {
     const confirmed = d.match && d.confirmed && sq.length > 0;
     const n = me ? noticeOf(d.id, me) : null;
     h += '<div class="card"><div class="title">' + esc(dayTitle(d)) + '</div>';
-    h += '<div class="small">' + esc([fdate(d.date), d.time ? 'a las ' + d.time : '', d.side].filter(Boolean).join(' · ')) + '</div>';
+    h += '<div class="small">' + esc([fdate(d.date), d.time ? 'a las ' + d.time : d.match ? 'hora por confirmar' : '', d.side].filter(Boolean).join(' · ')) + '</div>';
     if (d.meet) h += '<div class="small">Convocatoria: ' + esc(d.meet) + '</div>';
     if (d.ground) h += '<div class="small">' + esc(d.ground + (d.address ? ' · ' + d.address : '')) + '</div>';
     if (d.match && me) h += '<div class="small bold">' + (!confirmed ? 'Convocatoria aún sin confirmar' : called ? 'Estás convocado' : 'No estás convocado') + '</div>';
@@ -40,10 +50,14 @@ function viewHome() {
     if (me && (!d.match || !confirmed || called)) {
       h += '<div class="row"><button class="btn" data-act="warn" data-type="No puedo ir" data-day="' + esc(d.id) + '" data-pid="' + esc(me) + '">No puedo ir</button>'
         + '<button class="btn" data-act="warn" data-type="Llego tarde" data-day="' + esc(d.id) + '" data-pid="' + esc(me) + '">Llego tarde</button></div>';
+      // So the coach and the directiva know who is coming; the list is still taken on the day.
+      if (!n || n['Tipo'] !== 'Asistiré') h += '<div class="row"><button class="btn primary" data-act="warn" data-type="Asistiré" data-day="' + esc(d.id) + '" data-pid="' + esc(me) + '">Asistiré</button></div>';
     }
     h += '<div>';
     if (n) h += '<button class="link" data-act="unwarn" data-day="' + esc(d.id) + '" data-pid="' + esc(me) + '">Quitar aviso</button>';
-    if (/^https:\/\//.test(d.maps || '')) h += '<a class="link" href="' + esc(d.maps) + '" target="_blank" rel="noopener">Cómo llegar</a>';
+    // The match's own link, else the club's or the rival's ground; trainings at the club's.
+    const maps = d.match ? groundOf(d).maps : ((clubTeam() || {}).maps || '');
+    if (/^https:\/\//.test(maps || '')) h += '<a class="link" href="' + esc(maps) + '" target="_blank" rel="noopener">Cómo llegar</a>';
     h += '<button class="link" data-act="ics" data-day="' + esc(d.id) + '">Añadir al calendario</button></div></div>';
   });
   const played = all.filter(d => d.match && d.date < t && d.gf !== '').sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
@@ -51,8 +65,9 @@ function viewHome() {
     h += '<h2>Últimos resultados</h2>';
     played.forEach(d => {
       const goals = rows('Acta').filter(x => x['Partido ID'] === d.id && x['Tipo'] === 'Gol').map(x => playerName(x['Jugador ID']));
+      const mvps = rows('Acta').filter(x => x['Partido ID'] === d.id && x['Tipo'] === 'MVP').map(x => playerName(x['Jugador ID']));
       h += '<div class="card"><div class="title">' + esc(TEAM + ' ' + d.gf + ' – ' + d.ga + ' ' + d.title) + '</div>'
-        + '<div class="small">' + esc([fdate(d.date), goals.length ? 'Goles: ' + goals.join(', ') : ''].filter(Boolean).join(' · ')) + '</div></div>';
+        + '<div class="small">' + esc([fdate(d.date), goals.length ? 'Goles: ' + goals.join(', ') : '', mvps.length ? 'MVP: ' + mvps.join(' y ') + ' ⭐' : ''].filter(Boolean).join(' · ')) + '</div></div>';
     });
   }
   return h;
@@ -145,6 +160,12 @@ function warnDialog(dayId, type, pid) {
   const same = cur && cur['Tipo'] === type ? cur : null;
   let reason = same ? same['Motivo'] || '' : '';
   const own = pid === S.yo.jugadorId;
+  // Nothing to ask for "Asistiré": it is saved straight away.
+  if (type === 'Asistiré') {
+    send({ t: 'Avisos', op: 'u', v: { 'Día ID': dayId, 'Fecha': d.date, 'Jugador ID': pid, 'Tipo': type, 'Hora llegada': '', 'Motivo': '', 'Temporada': d.season, 'Avisado': '', 'A tiempo': '' } });
+    toast(own ? 'Apuntado: asistirás' : 'Aviso apuntado');
+    return;
+  }
   let h = '<form method="dialog"><div class="title">' + esc(type) + (own ? '' : ' · ' + esc(playerName(pid))) + '</div><div class="small">' + esc(dayTitle(d) + ' · ' + fdate(d.date)) + '</div>';
   if (type === 'No puedo ir') {
     h += '<label>Motivo</label><div class="chips">' + REASONS.map(r => '<button type="button" class="btn' + (reason === r ? ' on' : '') + '" data-reason="' + r + '">' + r + '</button>').join('') + '</div>';
@@ -238,4 +259,160 @@ function groundOf(d) {
   if (d.ground) return { ground: d.ground, maps: d.maps || '' };
   const place = d.side === 'Local' ? clubTeam() : d.side === 'Visitante' ? rivals().find(r => r.name.toLowerCase() === d.title.trim().toLowerCase()) : null;
   return { ground: place ? place.ground : '', maps: place ? place.maps : '' };
+}
+
+/**
+ * The player's attendance at a glance: the percentage, the days in a row he came and his last
+ * days as V (came), X (missed) and – (could not come), to keep it all green.
+ */
+function attendanceCard(me) {
+  const trail = allDays().filter(d => inSeason(d.row) && markOf(d.id, me))
+    .sort((a, b) => a.date.localeCompare(b.date) || String(a.time).localeCompare(String(b.time)))
+    .map(d => { const s = markOf(d.id, me)['Estado']; return s === 'OK' || s === 'Tarde' ? true : s === 'Falta' ? false : null; });
+  const s = stats(me);
+  const played = s.goals + s.assists + s.yellows + s.reds + s.mvps > 0;
+  if (!trail.length && !played) return '';
+  const counted = trail.filter(x => x !== null);
+  const percent = counted.length ? Math.floor(counted.filter(Boolean).length * 100 / counted.length) + ' %' : '—';
+  let streak = 0;
+  for (let i = counted.length - 1; i >= 0 && counted[i]; i--) streak++;
+  const dots = trail.slice(-12).map(x => '<span class="dot ' + (x === true ? 'v' : x === false ? 'x' : 'n') + '">' + (x === true ? 'V' : x === false ? 'X' : '–') + '</span>').join('');
+  return '<div class="card"><div class="row between"><div><div class="small">Tu asistencia</div><div class="big bold">' + percent + '</div></div>'
+    + '<div class="right-text"><div class="small">Racha</div><div class="bold">' + (streak ? '🔥 ' + streak + (streak === 1 ? ' seguido' : ' seguidos') : 'Empieza hoy') + '</div></div></div>'
+    + '<div class="dots">' + dots + '</div>'
+    + '<div class="statline">' + [['⚽', s.goals, 'Goles'], ['🅰️', s.assists, 'Asist.'], ['🟨', s.yellows, 'Amarillas'], ['🟥', s.reds, 'Rojas'], ['⭐', s.mvps, 'MVP']]
+      .map(x => '<div><div class="bold">' + x[0] + ' ' + x[1] + '</div><div class="small">' + x[2] + '</div></div>').join('') + '</div></div>';
+}
+
+/** Day and month of someone's birthday, "11-27": the sheet sends others only that ("Cumple"). */
+function birthdayOf(p) {
+  if (p['Cumple']) return String(p['Cumple']);
+  const n = String(p['Nacimiento'] || '');
+  return /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(n) ? n.slice(5) : '';
+}
+/** Today's birthdays first, then the rest of the week; the directiva and the coach congratulate by WhatsApp. */
+function birthdayCard() {
+  const t = new Date(today() + 'T12:00:00');
+  const list = players().map(p => {
+    const b = birthdayOf(p);
+    if (!b) return null;
+    const m = Number(b.slice(0, 2)), d = Number(b.slice(3, 5));
+    const on = y => { const last = new Date(y, m, 0).getDate(); return new Date(y, m - 1, Math.min(d, last), 12); };
+    let next = on(t.getFullYear());
+    if (ymd(next) < today()) next = on(t.getFullYear() + 1);
+    return (next - t) / 86400000 <= 7 ? { p: p, date: next } : null;
+  }).filter(Boolean).sort((a, b) => a.date - b.date);
+  if (!list.length) return '';
+  const days = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+  const now = list.filter(x => ymd(x.date) === today()), soon = list.filter(x => ymd(x.date) !== today());
+  let h = '<div class="card">';
+  now.forEach(x => {
+    h += '<div class="row between"><span class="bold">🎂 ¡Hoy cumple ' + esc(x.p['Nombre']) + '!</span>'
+      + (can.club() ? '<button class="link" data-act="congratulate" data-pid="' + esc(x.p['ID']) + '">Felicitar</button>' : '') + '</div>';
+  });
+  if (soon.length) h += '<div class="small">🎈 Esta semana: ' + esc(soon.map(x => x.p['Nombre'] + ' (' + days[x.date.getDay()] + ' ' + x.date.getDate() + ')').join(' · ')) + '</div>';
+  return h + '</div>';
+}
+function birthdayText(pid) {
+  return '🎉 *¡Feliz cumpleaños, ' + playerName(pid) + '!* 🎂' + String.fromCharCode(10, 10) + 'De parte de todo el ' + TEAM + '. ¡A celebrarlo! 🥳⚽';
+}
+
+/** The next match at a glance, in the club's black and gold. */
+function nextMatchCard(d) {
+  const days = Math.round((new Date(d.date + 'T12:00:00') - new Date(today() + 'T12:00:00')) / 86400000);
+  const count = days === 0 ? 'HOY' : days === 1 ? 'MAÑANA' : 'EN ' + days + ' DÍAS';
+  const rival = d.title.trim() || 'Rival por confirmar';
+  const title = d.side === 'Visitante' ? rival + ' vs ' + TEAM : TEAM + ' vs ' + rival;
+  const names = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  const dt = new Date(d.date + 'T12:00:00');
+  // Until the committee meeting the match may have no time yet.
+  const when = [names[dt.getDay()] + ' ' + dt.getDate() + '/' + (dt.getMonth() + 1), d.time || 'hora por confirmar', d.meet ? 'convocatoria ' + d.meet : ''].filter(Boolean).join(' · ');
+  const g = groundOf(d);
+  const kit = (typeof matchKits === 'function' ? matchKits() : []).find(k => k.name === d.kit);
+  return '<div class="card match-card"><div class="row between"><span class="gold small bold">PRÓXIMO ' + esc(d.label.toUpperCase()) + '</span><span class="pill">' + count + '</span></div>'
+    + '<div class="match-title">' + esc(title) + '</div><div class="gold">' + esc(when) + '</div>'
+    + (g.ground ? '<div class="small">📍 ' + esc(g.ground) + '</div>' : '')
+    + '<div class="row between mt"><span>' + (kit ? esc(kit.name) : '') + '</span>'
+    + (/^https:\/\//.test(g.maps || '') ? '<a class="btn gold-btn" href="' + esc(g.maps) + '" target="_blank" rel="noopener">Cómo llegar</a>' : '') + '</div></div>';
+}
+
+// ---------- MVP vote: secret, never oneself, the match day and the next ----------
+/** [opens, closes]: 2 hours after the match time (without one, the next day at 00:00), for 24 hours. */
+function voteWindow(d) {
+  const p = String(d.date || '').split('-').map(Number);
+  if (p.length !== 3 || !p[0]) return null;
+  const m = /^(\d{2}):(\d{2})$/.exec(normTime(d.time || ''));
+  const opens = m ? new Date(p[0], p[1] - 1, p[2], Number(m[1]) + 2, Number(m[2])) : new Date(p[0], p[1] - 1, p[2] + 1, 0, 0);
+  return [opens, new Date(opens.getTime() + 24 * 3600000)];
+}
+function voteOpen(d) {
+  const w = d.match && voteWindow(d);
+  const now = new Date();
+  return !!w && now >= w[0] && now <= w[1];
+}
+function voteClosed(d) {
+  const w = d.match && voteWindow(d);
+  return !!w && new Date() > w[1];
+}
+/** "lunes 23/11 a las 12:00": until when one can vote. */
+function voteUntil(d) {
+  const w = voteWindow(d);
+  if (!w) return '';
+  const days = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  const c = w[1];
+  return days[c.getDay()] + ' ' + c.getDate() + '/' + (c.getMonth() + 1) + ' a las ' + String(c.getHours()).padStart(2, '0') + ':' + String(c.getMinutes()).padStart(2, '0');
+}
+/** The match this player must still vote for, if any. */
+function pendingVote(me) {
+  return allDays().find(d => voteOpen(d) && squad(d).includes(me) && !myVote(d.id, me));
+}
+/** The vote nobody can skip: no Escape, no closing; it goes once the vote is sent. */
+function votePrompt() {
+  const me = S.yo && S.yo.jugadorId;
+  const dlg = $('dlg');
+  if (!me || !S.datos || (dlg.open && dlg.dataset.vote)) return;
+  const d = pendingVote(me);
+  if (!d || dlg.open) return;
+  const options = players().filter(p => squad(d).includes(p['ID']) && p['ID'] !== me);
+  const match = d.side === 'Visitante' ? (d.title.trim() || 'el rival') + ' vs ' + TEAM : TEAM + ' vs ' + (d.title.trim() || 'el rival');
+  openDialog('<form method="dialog"><div class="title">⭐ Vota al MVP</div><p>' + esc(match) + '. Elige al mejor de tus compañeros para seguir. Tu voto es secreto y no se puede cambiar.</p>'
+    + pickPlayer('promptVote', options, '', 'Elige a un compañero')
+    + '<p class="small">Puedes votar hasta el ' + esc(voteUntil(d)) + '.</p>'
+    + '<div class="row end"><button class="btn primary" value="ok">Votar</button></div></form>', null, () => {
+    const voted = $('promptVote').value;
+    if (!voted) { toast('Elige a un compañero'); return false; }
+    send({ t: 'Votos MVP', op: 'u', v: { 'Partido ID': d.id, 'Jugador ID': me, 'Votado ID': voted, 'Temporada': d.season || activeSeason() } });
+    delete dlg.dataset.vote;
+    toast('Voto guardado');
+  });
+  dlg.dataset.vote = d.id;
+  dlg.onkeydown = e => { if (e.key === 'Escape') e.preventDefault(); };
+  dlg.oncancel = e => e.preventDefault();
+}
+function myVote(dayId, me) {
+  return rows('Votos MVP').find(v => v['Partido ID'] === dayId && v['Jugador ID'] === me);
+}
+function voteCard(d, me) {
+  const cur = myVote(d.id, me);
+  const options = players().filter(p => squad(d).includes(p['ID']) && p['ID'] !== me);
+  const match = d.side === 'Visitante' ? (d.title.trim() || 'el rival') + ' vs ' + TEAM : TEAM + ' vs ' + (d.title.trim() || 'el rival');
+  // The vote stays: once given there is nothing to change.
+  if (cur) {
+    return '<div class="card"><div class="title">⭐ Vota al MVP</div><div class="small">' + esc(match + '. Tu voto es secreto y no se puede cambiar.') + '</div>'
+      + '<div class="bold mt">Tu voto: ' + esc(playerName(cur['Votado ID'])) + ' ✓</div></div>';
+  }
+  return '<div class="card"><div class="title">⭐ Vota al MVP</div>'
+    + '<div class="small">' + esc(match + ' · hasta el ' + voteUntil(d) + '. Tu voto es secreto y no se puede cambiar.') + '</div>'
+    + pickPlayer('vote_' + d.id, options, '', 'Elige a un compañero')
+    + '<div class="row end mt"><button class="btn primary" data-act="vote" data-day="' + esc(d.id) + '">Votar</button></div></div>';
+}
+function vote(dayId) {
+  const me = S.yo.jugadorId;
+  const sel = $('vote_' + dayId);
+  const voted = sel && sel.value;
+  if (!me || !voted || voted === me) { toast('Elige a un compañero'); return; }
+  if (myVote(dayId, me)) return;
+  const d = findDay(dayId);
+  send({ t: 'Votos MVP', op: 'u', v: { 'Partido ID': dayId, 'Jugador ID': me, 'Votado ID': voted, 'Temporada': (d && d.season) || activeSeason() } });
+  toast('Voto guardado');
 }

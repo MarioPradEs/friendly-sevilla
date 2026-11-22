@@ -17,6 +17,10 @@ function viewDays() {
     const marks = marksOf(d.id).filter(m => calledUp(d).includes(m['Jugador ID']));
     const n = s => marks.filter(m => m['Estado'] === s).length;
     const unavailable = n('No puede');
+    // Before the list is taken: who said they will come and who said they cannot.
+    const marked = marks.map(m => m['Jugador ID']);
+    const told = rows('Avisos').filter(a => a['Día ID'] === d.id && !marked.includes(a['Jugador ID']));
+    const going = goingLine(told.filter(a => a['Tipo'] === 'Asistiré').map(a => a['Jugador ID'])), notGoing = told.filter(a => a['Tipo'] === 'No puedo ir').length;
     const result = d.match && d.gf !== '' && d.ga !== '' ? 'Resultado ' + d.gf + '-' + d.ga + verdict(d) : '';
     const info = [
       marks.length > unavailable ? (n('OK') + n('Tarde')) + ' de ' + (marks.length - unavailable) + ' vinieron' : '',
@@ -24,11 +28,13 @@ function viewDays() {
       n('Falta') ? countOf(n('Falta'), 'falta', 'faltas') : '',
       unavailable ? countOf(unavailable, 'no puede', 'no pueden') : '',
       unmarked(d).length ? unmarked(d).length + ' sin marcar' : '',
+      going,
+      notGoing ? countOf(notGoing, 'avisa que no puede', 'avisan que no pueden') : '',
       notCalledUp(d).length ? countOf(notCalledUp(d).length, 'no convocado', 'no convocados') : '',
     ].filter(Boolean).join(' · ');
     h += '<div class="card tap" data-act="openDay" data-day="' + esc(d.id) + '"><div class="title">' + esc(dayTitle(d)) + '</div><div class="small">'
       + esc(fdate(d.date) + (d.time ? ' · ' + d.time : '')) + '</div>' + (result ? '<div class="small bold">' + esc(result) + '</div>' : '')
-      + '<div class="small">' + esc(info) + '</div></div>';
+      + '<div class="small">' + esc(info) + '</div>' + (keeperMissing(d) ? '<div class="small bold warn">Ningún portero ha dicho que va</div>' : '') + '</div>';
   });
   return h;
 }
@@ -68,7 +74,14 @@ function viewDay(d) {
   }
   h += '<div class="grid2"><div><label for="dayTime">' + (d.match ? 'Partido' : 'Hora') + '</label><input id="dayTime" type="time" value="' + esc(normTime(d.time)) + '" data-chg="dayTime" data-day="' + esc(d.id) + '"' + (edit ? '' : ' disabled') + '></div>';
   if (d.match) h += '<div><label for="dayMeet">Convocatoria</label><input id="dayMeet" type="time" value="' + esc(normTime(d.meet)) + '" data-chg="dayMeet" data-day="' + esc(d.id) + '"' + (edit ? '' : ' disabled') + '></div>';
-  h += '</div></div>';
+  h += '</div>';
+  if (keeperMissing(d)) h += '<div class="small bold warn">Ningún portero ha dicho que va</div>';
+  // Before the day: remind by WhatsApp those who have not said whether they come.
+  if (can.editDays() && d.date >= today() && d.gf === '') {
+    const silent = silentPlayers(d).length;
+    h += '<button class="btn full mt" data-act="remind" data-day="' + esc(d.id) + '">Recordar por WhatsApp' + (silent ? ' (' + silent + ' sin avisar)' : '') + '</button>';
+  }
+  h += '</div>';
   if (parts.length > 1) h += '<div class="parts">' + parts.map((p, i) => '<button class="btn' + (S.part === p ? ' on' : '') + '" data-act="part" data-part="' + esc(p) + '">' + (i + 1) + '. ' + esc(p) + '</button>').join('') + '</div>';
   if (S.part === 'Convocatoria') h += partSquad(d);
   else if (S.part === 'Acta') h += partReport(d);
@@ -142,7 +155,13 @@ function partList(d) {
   const marking = can.mark();
   const left = unmarked(d).length;
   let h = '';
-  if (marking && left) h += '<div class="row between"><span class="small">' + left + ' sin marcar</span><button class="link" data-act="markRest" data-day="' + esc(d.id) + '">Poner OK al resto</button></div>';
+  if (marking && left) {
+    // "Asistiré" to OK, "No puedo ir" to No puede; the rest stays to be checked.
+    const told = fromNotices(d).length;
+    h += '<div class="row between"><span class="small">' + left + ' sin marcar</span><span>'
+      + (told ? '<button class="link" data-act="markNotices" data-day="' + esc(d.id) + '">Según avisos (' + told + ')</button>' : '')
+      + '<button class="link" data-act="markRest" data-day="' + esc(d.id) + '">OK al resto</button></span></div>';
+  }
   players().filter(p => who.includes(p['ID'])).forEach(p => {
     const pid = p['ID'];
     const m = markOf(d.id, pid);
@@ -193,6 +212,23 @@ function mark(dayId, pid, state) {
 }
 
 /** For when almost everyone came: the rest OK, or "No puede" for those who said so. Marks made stay. */
+/** Those still unmarked who said "Asistiré" or "No puedo ir". */
+function fromNotices(d) {
+  return unmarked(d).filter(pid => { const n = noticeOf(d.id, pid); return n && (n['Tipo'] === 'Asistiré' || n['Tipo'] === 'No puedo ir'); });
+}
+/** Marks only what the players said; everyone else stays unmarked, to be checked one by one. */
+function markNotices(dayId) {
+  const d = findDay(dayId);
+  if (!d) return;
+  send(fromNotices(d).map(pid => {
+    const n = noticeOf(dayId, pid);
+    const cant = n['Tipo'] === 'No puedo ir';
+    return { t: 'Asistencia', op: 'u', v: { 'ID': dayId + '_' + pid, 'Fecha': d.date, 'Sesión': d.session, 'Día ID': dayId, 'Jugador ID': pid,
+      'Estado': cant ? 'No puede' : 'OK', 'Motivo': cant && REASONS.includes(n['Motivo']) ? n['Motivo'] : '', 'Justificada': 'false', 'Equipación incorrecta': 'false',
+      'Temporada': d.season || activeSeason() } };
+  }));
+}
+
 function markRest(dayId) {
   const d = findDay(dayId);
   if (!d) return;
@@ -272,6 +308,18 @@ function partReport(d) {
   });
   if (cards.length) h += '<p class="small">Las tarjetas con multa la crean en la hoja al sincronizar (la doble amarilla, sin importe hasta que lo ponga la directiva). Las de lance del juego no se pagan.</p>';
   const mvp = (events.find(e => e['Tipo'] === 'MVP') || {})['Jugador ID'];
+  const votes = rows('Votos MVP').filter(v => v['Partido ID'] === d.id);
+  if (ROLE() === 'Directiva' && (votes.length || voteOpen(d))) {
+    const count = {};
+    votes.forEach(v => { count[v['Votado ID']] = (count[v['Votado ID']] || 0) + 1; });
+    // The three most voted, then who voted whom: the votes guide, the directiva picks the MVP.
+    const top = Object.keys(count).sort((a, b) => count[b] - count[a] || a.localeCompare(b)).slice(0, 3);
+    h += '<h2>Votación del MVP (' + votes.length + ')</h2><p class="small">' + (voteOpen(d)
+      ? 'Abierta hasta el ' + esc(voteUntil(d)) + '. Los votos orientan: el MVP lo eliges tú abajo.'
+      : 'Cerrada. Los votos orientan: el MVP lo eliges tú abajo.') + '</p>'
+      + top.map((id, i) => '<div class="bold">' + (i + 1) + '. ' + esc(playerName(id)) + ' · ' + count[id] + (count[id] === 1 ? ' voto' : ' votos') + '</div>').join('')
+      + votes.map(v => '<div class="small">' + esc(playerName(v['Jugador ID']) + ' → ' + playerName(v['Votado ID'])) + '</div>').join('');
+  }
   h += '<h2>Mejor jugador (MVP)</h2><div class="chips">' + sq.map(p => '<button class="btn' + (mvp === p['ID'] ? ' on' : '') + '" data-act="mvp" data-pid="' + esc(p['ID']) + '" data-day="' + esc(d.id) + '"' + (editing ? '' : ' disabled') + '>' + esc(p['Nombre']) + '</button>').join('') + '</div>';
   return h;
 }
@@ -789,4 +837,14 @@ function seasonsDialog() {
       .concat([{ t: 'Temporadas', op: 'u', v: { 'Nombre': name, 'Desde': $('snFrom').value, 'Hasta': $('snTo').value, 'Activa': 'true' } }]));
     S.viewSeason = '';
   });
+}
+
+/** Who said "Asistiré", field players and goalkeepers apart, goalkeepers by name: "Asisten 4 jugadores y 1 portero (Chino)". */
+function goingLine(ids) {
+  const going = players().filter(p => ids.includes(p['ID']));
+  if (!going.length) return '';
+  const keepers = going.filter(isKeeper), field = going.length - keepers.length;
+  const parts = [field ? (field === 1 ? '1 jugador' : field + ' jugadores') : '',
+    keepers.length ? (keepers.length === 1 ? '1 portero' : keepers.length + ' porteros') + ' (' + keepers.map(p => p['Nombre']).join(', ') + ')' : ''].filter(Boolean);
+  return (going.length === 1 ? 'Asiste ' : 'Asisten ') + parts.join(' y ');
 }

@@ -223,6 +223,7 @@ function warnedInTime(d, n) {
 }
 
 function noticeText(n, m, own) {
+  if (n['Tipo'] === 'Asistiré') return own ? 'Has avisado: asistirás' : 'Avisó: asistirá' + (n['Apuntado por'] ? ' · lo apuntó ' + n['Apuntado por'] : '');
   if (own) {
     if (n['Tipo'] === 'No puedo ir') return 'Has avisado: no puedes ir' + (n['Motivo'] ? ' (' + n['Motivo'] + ')' : '');
     return 'Has avisado: llegas tarde' + (n['Hora llegada'] ? ', sobre las ' + n['Hora llegada'] : '') + (n['Motivo'] ? ' (' + n['Motivo'] + ')' : '');
@@ -255,6 +256,33 @@ function fineOf(f, paid) {
 }
 function fines(filter) { const paid = paidByFine(); return rows('Multas').map(f => fineOf(f, paid)).filter(filter || (() => true)); }
 const findFine = id => fines(f => f.id === id)[0];
+/** Who has not said yet whether they come: the squad of a match, everyone at a training. */
+function silentPlayers(d) {
+  const told = rows('Avisos').filter(a => a['Día ID'] === d.id).map(a => a['Jugador ID']);
+  const marked = marksOf(d.id).map(m => m['Jugador ID']);
+  const ids = calledUp(d);
+  return players().filter(p => ids.includes(p['ID']) && !told.includes(p['ID']) && !marked.includes(p['ID']))
+    .sort((a, b) => String(a['Nombre']).toLowerCase().localeCompare(String(b['Nombre']).toLowerCase()));
+}
+/** A day still to come for which no goalkeeper has said "Asistiré". */
+function keeperMissing(d) {
+  // Already played (result in) or already marked: nothing to warn about.
+  if (d.date < today() || marksOf(d.id).length || d.gf !== '') return false;
+  const going = rows('Avisos').filter(a => a['Día ID'] === d.id && a['Tipo'] === 'Asistiré').map(a => a['Jugador ID']);
+  const ids = calledUp(d);
+  return !players().some(p => ids.includes(p['ID']) && going.includes(p['ID']) && isKeeper(p));
+}
+function reminderText(d) {
+  const who = silentPlayers(d);
+  const L = ['📣 *' + dayTitle(d) + '* · ' + fdate(d.date) + (d.time ? ' a las ' + d.time : ''), ''];
+  if (!who.length) L.push('Ya ha avisado todo el mundo 👏');
+  else {
+    L.push('Decid en la app si vais: *Asistiré*, *No puedo ir* o *Llego tarde*.', '', 'Faltan por avisar (' + who.length + '):');
+    who.forEach(p => L.push('• ' + p['Nombre']));
+  }
+  L.push('', '📲 https://marioprades.github.io/friendly-sevilla/');
+  return L.join(String.fromCharCode(10));
+}
 /** What a fine is called in the sheet: a known reason, or "Otro" with the text in Notas. */
 function fineReason(label) {
   const known = SHEET_FINE_REASONS.concat(rules().map(r => r.label)).concat(rows('Multas').map(m => m['Motivo']).filter(m => m && m !== 'Otro'));

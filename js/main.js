@@ -1,4 +1,24 @@
 'use strict';
+/** What each version brought, newest first, for the directiva. Add a line here with every change. */
+const CHANGELOG = [
+  ["0.24.0", "22/11/2026", ["Botón «Asistiré»", "Jugadores y porteros que van", "Recordatorio por WhatsApp", "Aviso «Ningún portero ha dicho que va»", "Aviso de multas sin pagar en el portal", "Pasar lista según avisos", "Asistencia y racha en el portal", "Estadísticas en el portal", "Cumpleaños", "Cómo llegar en entrenos y partidos", "Próximo partido destacado", "Votación del MVP (obligatoria tras el partido)", "Top 3 de votos para elegir el MVP", "Novedades y cambios"]],
+  ["0.23.0", "22/11/2026", ["Tarjeta con o sin multa", "Desplegables", "Rival «Otro equipo»"]],
+  ["0.22.1", "22/11/2026", ["La app abre en el portal del jugador"]],
+  ["0.22.0", "22/11/2026", ["Engranaje de ajustes", "Lápiz para editar la plantilla"]],
+  ["0.21.3", "22/11/2026", ["Arreglo de sincronización al cerrar sesión"]],
+  ["0.21.2", "22/11/2026", ["Arreglo de descarga en Android 8 y 9"]],
+  ["0.21.1", "22/11/2026", ["Aviso de versión nueva", "Descarga de la app desde la web"]],
+  ["0.20.2", "22/11/2026", ["Pantalla de carga con reintentar"]],
+  ["0.20.1", "22/11/2026", ["Botón «Mi portal de jugador»"]],
+  ["0.20.0", "22/11/2026", ["Solicitudes de acceso"]],
+  ["0.19.1", "22/11/2026", ["Web para iPhone", "El entrenador solo ve multas"]],
+  ["0.19.0", "22/11/2026", ["Rol «Lista»", "Confirmar antes de borrar"]],
+  ["0.18.0", "22/11/2026", ["Temporadas", "Pagos a plazos y saldo a favor", "Multas en la ficha del jugador", "Entrenamientos de toda la temporada", "Ranking", "Añadir al calendario", "Recordatorio de pagos", "Avisos apuntados por la directiva", "Equipaciones de portero"]],
+  ["0.17.1", "21/11/2026", ["Equipación en el portal del jugador"]],
+  ["0.17.0", "21/11/2026", ["Equipación del partido", "Confirmar convocatoria", "Convocatoria por WhatsApp"]],
+  ["0.16.1", "21/11/2026", ["Local / Visitante"]],
+  ["0.16.0", "21/11/2026", ["App Friendly Sevilla Club", "Entrada con Google", "Avisos «No puedo ir» y «Llego tarde»", "Acta del partido", "Perfil del jugador", "Cargos y pagos por jugador", "Rival desde la hoja"]],
+  ["0.15.0", "21/11/2026", ["Conexión con la hoja de la directiva", "Portal del jugador", "Pestaña Cuentas", "Convocatoria de 18"]]];
 // Navigation by role, sign-in, dialogs and the wiring of every button to its action.
 
 const PORTAL = { inicio: viewHome, pagos: viewMoney, perfil: viewProfile };
@@ -31,6 +51,8 @@ function renderNav() {
 function render() {
   if (!S.token) return;
   renderStatus(); renderNav();
+  // Only the directiva follows what changes from version to version.
+  $('news').classList.toggle('hidden', ROLE() !== 'Directiva');
   document.body.classList.toggle('wide', can.club());
   if (!S.datos) { $('view').innerHTML = '<p class="small">Cargando los datos de la hoja…</p>'; return; }
   let h;
@@ -48,6 +70,8 @@ function render() {
   const y = window.scrollY;
   $('view').innerHTML = h;
   window.scrollTo(0, y);
+  // After a match the called-up must vote the MVP before going on.
+  votePrompt();
 }
 
 /**
@@ -123,8 +147,12 @@ const ACT = {
   callUp: ds => toggleCallUp(ds.day, ds.pid),
   confirmSquad: ds => { const d = findDay(ds.day); if (d) send({ t: 'Partidos', op: 'e', v: { 'ID': ds.day, 'Convocatoria confirmada': d.confirmed ? 'false' : 'true' } }); },
   squadWhatsApp: ds => { const d = findDay(ds.day); if (d) shareText(squadText(d)); },
+  remind: ds => { const d = findDay(ds.day); if (d) shareText(reminderText(d)); },
   mark: ds => mark(ds.day, ds.pid, ds.state),
   markRest: ds => markRest(ds.day),
+  markNotices: ds => markNotices(ds.day),
+  congratulate: ds => shareText(birthdayText(ds.pid)),
+  vote: ds => vote(ds.day),
   kitIssue: ds => toggleKitIssue(ds.day, ds.pid),
   excuse: ds => toggleExcuse(ds.day, ds.pid),
   reason: ds => toggleReason(ds.day, ds.pid, ds.reason),
@@ -152,7 +180,7 @@ const ACT = {
 function noticeForDialog(dayId, pid) {
   const n = noticeOf(dayId, pid);
   openDialog('<form method="dialog"><div class="title">Aviso · ' + esc(playerName(pid)) + '</div>' + (n ? '<p class="small">' + esc(noticeText(n, markOf(dayId, pid))) + '</p>' : '')
-    + '<div class="row"><button type="button" class="btn" data-nt="No puedo ir">No puede ir</button><button type="button" class="btn" data-nt="Llego tarde">Llega tarde</button>'
+    + '<div class="row"><button type="button" class="btn" data-nt="Asistiré">Asistirá</button><button type="button" class="btn" data-nt="No puedo ir">No puede ir</button><button type="button" class="btn" data-nt="Llego tarde">Llega tarde</button>'
     + (n ? '<button type="button" class="btn danger" data-nt="quitar">Quitar aviso</button>' : '') + '</div><div class="row end"><button type="button" class="btn" value="cancel">Cancelar</button></div></form>', dlg => {
     dlg.onclick = e => {
       const b = e.target.closest('[data-nt]');
@@ -255,6 +283,9 @@ function show() {
 }
 
 $('refresh').onclick = () => sync();
+$('news').onclick = () => openDialog('<form method="dialog"><div class="title">Novedades y cambios</div>'
+  + CHANGELOG.map(v => '<h2>' + esc(v[0] + ' · ' + v[1]) + '</h2>' + v[2].map(c => '<p class="small">• ' + esc(c) + '</p>').join('')).join('')
+  + '<div class="row end"><button type="button" class="btn" value="cancel">Cerrar</button></div></form>');
 $('logout').onclick = () => {
   const pending = S.queue.length ? ' Tienes ' + countOf(S.queue.length, 'cambio', 'cambios') + ' sin enviar a la hoja: se perderán.' : '';
   if (confirm('¿Salir de tu cuenta en este dispositivo?' + pending)) logout();
