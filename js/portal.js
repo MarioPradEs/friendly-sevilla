@@ -149,7 +149,7 @@ function warnDialog(dayId, type, pid) {
       + '<label for="lateReason">Motivo (opcional)</label><input id="lateReason" maxlength="80" value="' + esc(reason) + '">'
       + '<p class="small">Si avisa antes de la hora, el retraso cuenta como justificado y sin multa.</p>';
   }
-  h += '<div class="row end"><button class="btn" value="cancel">Cancelar</button><button class="btn primary" id="warnOk" value="ok"' + (type === 'No puedo ir' && !reason ? ' disabled' : '') + '>Avisar</button></div></form>';
+  h += '<div class="row end"><button type="button" class="btn" value="cancel">Cancelar</button><button class="btn primary" id="warnOk" value="ok"' + (type === 'No puedo ir' && !reason ? ' disabled' : '') + '>Avisar</button></div></form>';
   openDialog(h, dlg => {
     dlg.onclick = e => {
       const r = e.target.closest('[data-reason]');
@@ -161,7 +161,10 @@ function warnDialog(dayId, type, pid) {
   }, () => {
     const arrival = type === 'Llego tarde' ? $('arrival').value : '';
     const why = type === 'Llego tarde' ? $('lateReason').value.trim() : reason;
-    send({ t: 'Avisos', op: 'u', v: { 'Día ID': dayId, 'Fecha': d.date, 'Jugador ID': pid, 'Tipo': type, 'Hora llegada': arrival, 'Motivo': why, 'Temporada': d.season } });
+    const v = { 'Día ID': dayId, 'Fecha': d.date, 'Jugador ID': pid, 'Tipo': type, 'Hora llegada': arrival, 'Motivo': why, 'Temporada': d.season };
+    // A new kind of notice is stamped again by the sheet: the old "in time" no longer counts meanwhile.
+    if (!cur || cur['Tipo'] !== type) { v['Avisado'] = ''; v['A tiempo'] = ''; }
+    send({ t: 'Avisos', op: 'u', v: v });
     toast('Aviso apuntado');
   });
 }
@@ -188,7 +191,13 @@ function calendar(dayId) {
   if (place.ground || d.address) lines.push('LOCATION:' + clean([place.ground, d.address].filter(Boolean).join(', ')));
   if (d.match && d.meet) lines.push('DESCRIPTION:' + clean('Convocatoria: ' + normTime(d.meet)));
   lines.push('END:VEVENT', 'END:VCALENDAR');
-  const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar' });
+  const ics = lines.join('\r\n');
+  // An iPhone app on the home screen does not download files: opening the event directly offers to add it.
+  if (navigator.standalone || /iPhone|iPad|iPod/.test(navigator.userAgent)) {
+    window.location.href = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
+    return;
+  }
+  const blob = new Blob([ics], { type: 'text/calendar' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = 'friendly-' + d.date + '.ics';
   document.body.appendChild(a); a.click(); a.remove();

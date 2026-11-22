@@ -109,10 +109,20 @@ async function sync() {
   try {
     const r = await api({ action: 'sync', token: S.token, ops: ops });
     if (!r.ok) {
-      if (r.error === 'SESION') { S.syncing = false; logout(); $('loginMsg').textContent = 'La sesión ha caducado: vuelve a entrar.'; return; }
+      if (r.error === 'SESION') {
+        // What was not sent yet stays on this device and goes up after signing in again with the same account.
+        S.syncing = false;
+        store.set('queueOwner', S.yo && S.yo.email);
+        S.token = null; store.del('token');
+        show();
+        $('loginMsg').textContent = 'La sesión ha caducado: vuelve a entrar.' + (S.queue.length ? ' Tus ' + countOf(S.queue.length, 'cambio', 'cambios') + ' sin enviar se guardan.' : '');
+        return;
+      }
       throw new Error(r.error + (r.detalle ? ': ' + r.detalle : ''));
     }
     S.queue = S.queue.slice(ops.length);
+    // The sheet checks every change again; if it turned something down, say so instead of losing it quietly.
+    if (r.ignoradas > 0) toast(countOf(r.ignoradas, 'cambio no permitido', 'cambios no permitidos') + ' para tu rol: no se ha guardado');
     S.yo = r.yo; S.datos = r.datos; S.lastSync = Date.now();
     // What was changed meanwhile still shows until it goes up too.
     S.queue.forEach(applyLocal);
@@ -168,7 +178,8 @@ function dayOf(r, match) {
     return { id: r['ID'], date: r['Fecha'], match: false, label: 'Entrenamiento', type: '', session: 'Entrenamiento',
       title: r['Notas'] || '', time: r['Hora'] || '', meet: '', season: r['Temporada'] || '', row: r };
   }
-  const kind = KINDS.find(k => k[1] === r['Tipo']) || (r['Tipo'] === 'Torneo' ? KINDS[3] : KINDS[1]);
+  // Anything that is not a friendly or a tournament is a league match, also an empty Tipo typed by hand.
+  const kind = KINDS.slice(1).find(k => k[1] === r['Tipo']) || KINDS[1];
   return {
     id: r['ID'], date: r['Fecha'], match: true, label: kind[0], type: r['Tipo'] || 'Liga',
     session: r['Tipo'] === 'Amistoso' ? 'Amistoso' : r['Tipo'] === 'Torneo' ? 'Torneo' : 'Partido',
@@ -292,6 +303,12 @@ const earlier = s => s && s !== viewed();
 const shortSeason = s => { const m = String(s || '').match(/^(\d{4})\/(\d{4})$/); return m ? m[1].slice(2) + '/' + m[2].slice(2) : s; };
 const payClass = (rest, paid) => (rest === 0 ? 'paid' : paid > 0 ? 'part' : 'owed');
 const paidText = (amt, rest) => (rest === 0 ? money(amt) + ' ✓' : amt - rest > 0 ? money(amt - rest) + ' de ' + money(amt) : money(amt));
+
+/** A short list to pick one player from, instead of a wall of buttons on a phone. */
+function pickPlayer(id, list, selected, empty) {
+  return '<select id="' + id + '" class="full">' + (empty ? '<option value="">' + esc(empty) + '</option>' : '')
+    + list.map(p => '<option value="' + esc(p['ID']) + '"' + (p['ID'] === selected ? ' selected' : '') + '>' + esc((p['Dorsal'] ? p['Dorsal'] + ' · ' : '') + p['Nombre']) + '</option>').join('') + '</select>';
+}
 
 // ---------- WhatsApp ----------
 function shareText(text) {

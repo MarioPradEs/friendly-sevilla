@@ -45,28 +45,63 @@ function render() {
   } else {
     h = ({ inicio: viewHome, pagos: viewMoney, perfil: viewProfile, multas: viewFines, plantilla: viewSquad, resumen: viewSummary, cuentas: viewAccounts }[S.tab] || viewHome)();
   }
-  // Keep the place and what is being typed when the page redraws after a sync.
-  const focus = document.activeElement && document.activeElement.id;
   const y = window.scrollY;
   $('view').innerHTML = h;
   window.scrollTo(0, y);
-  if (focus && $(focus) && $(focus).tagName === 'INPUT') $(focus).focus();
 }
 
+/**
+ * While someone types in the page, a sync coming back must not redraw it under their fingers:
+ * the redraw waits until they leave the field.
+ */
+let redrawLater = false;
+const typing = () => { const a = document.activeElement; return !!a && $('view').contains(a) && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName); };
+const renderNow = render;
+render = function () {
+  if (S.token && S.datos && typing()) { redrawLater = true; renderStatus(); return; }
+  redrawLater = false;
+  renderNow();
+};
+document.addEventListener('focusout', () => setTimeout(() => { if (redrawLater && !typing()) render(); }, 0));
+
 // ---------- dialogs ----------
+/** Closes the dialog, also on browsers without <dialog> (iPhones before iOS 15.4). */
+function closeDialog() {
+  const dlg = $('dlg');
+  if (typeof dlg.close === 'function' && dlg.open) dlg.close();
+  else dlg.removeAttribute('open');
+  dlg.classList.remove('fallback');
+}
+
+/**
+ * Cancelar only closes; the main button (value "ok") runs onOk, saved the moment it is pressed.
+ * If onOk returns false (something missing), the dialog stays open with what was typed.
+ * Enter in a field acts as the main button, never as Cancelar.
+ */
 function openDialog(html, setup, onOk) {
   const dlg = $('dlg');
   dlg.innerHTML = html;
   dlg.onclick = null;
-  dlg.returnValue = '';
   if (setup) setup(dlg);
-  // Saved the moment the button is pressed, not on close: the next dialog may already be open by then.
-  dlg.onclose = null;
-  dlg.onsubmit = e => { if (e.submitter && e.submitter.value === 'ok' && onOk) onOk(dlg); };
-  if (!dlg.open) dlg.showModal();
+  dlg.onsubmit = e => {
+    e.preventDefault();
+    const b = e.submitter || dlg.querySelector('button[value=ok]');
+    if (!b || b.value !== 'ok') { closeDialog(); return; }
+    if (onOk && onOk(dlg) === false) return;
+    closeDialog();
+  };
+  dlg.onkeydown = e => { if (e.key === 'Escape') closeDialog(); };
+  if (dlg.open) return;
+  if (typeof dlg.showModal === 'function') dlg.showModal();
+  else { dlg.setAttribute('open', ''); dlg.classList.add('fallback'); }
 }
+// Cancelar and the backdrop's close buttons are plain buttons: they never submit.
+document.addEventListener('click', e => {
+  const b = e.target.closest('#dlg button[value=cancel]');
+  if (b) { e.preventDefault(); closeDialog(); }
+});
 function confirmDialog(title, text, ok, action) {
-  openDialog('<form method="dialog"><div class="title">' + esc(title) + '</div><p>' + esc(text) + '</p><div class="row end"><button class="btn" value="cancel">Cancelar</button><button class="btn danger" value="ok">' + esc(ok) + '</button></div></form>', null, action);
+  openDialog('<form method="dialog"><div class="title">' + esc(title) + '</div><p>' + esc(text) + '</p><div class="row end"><button type="button" class="btn" value="cancel">Cancelar</button><button class="btn danger" value="ok">' + esc(ok) + '</button></div></form>', null, action);
 }
 
 // ---------- actions ----------
@@ -117,11 +152,11 @@ function noticeForDialog(dayId, pid) {
   const n = noticeOf(dayId, pid);
   openDialog('<form method="dialog"><div class="title">Aviso · ' + esc(playerName(pid)) + '</div>' + (n ? '<p class="small">' + esc(noticeText(n, markOf(dayId, pid))) + '</p>' : '')
     + '<div class="row"><button type="button" class="btn" data-nt="No puedo ir">No puede ir</button><button type="button" class="btn" data-nt="Llego tarde">Llega tarde</button>'
-    + (n ? '<button type="button" class="btn danger" data-nt="quitar">Quitar aviso</button>' : '') + '</div><div class="row end"><button class="btn" value="cancel">Cancelar</button></div></form>', dlg => {
+    + (n ? '<button type="button" class="btn danger" data-nt="quitar">Quitar aviso</button>' : '') + '</div><div class="row end"><button type="button" class="btn" value="cancel">Cancelar</button></div></form>', dlg => {
     dlg.onclick = e => {
       const b = e.target.closest('[data-nt]');
       if (!b) return;
-      dlg.close('cancel');
+      closeDialog();
       if (b.dataset.nt === 'quitar') send({ t: 'Avisos', op: 'd', v: { 'Día ID': dayId, 'Jugador ID': pid } });
       else warnDialog(dayId, b.dataset.nt, pid);
     };
@@ -170,6 +205,10 @@ async function onGoogle(resp) {
     S.token = a.token;
     S.yo = { email: a.email, nombre: a.nombre, rol: a.rol, jugadorId: a.jugadorId };
     store.set('token', S.token); store.set('yo', S.yo);
+    // Changes kept from an expired session only go up for the same account.
+    const owner = store.get('queueOwner', null);
+    if (owner && owner !== a.email) { S.queue = []; S.datos = null; store.set('queue', []); store.del('datos'); }
+    store.del('queueOwner');
     $('loginMsg').textContent = '';
     show();
     sync();
@@ -198,7 +237,10 @@ function show() {
 }
 
 $('refresh').onclick = () => sync();
-$('logout').onclick = () => { if (confirm('¿Salir de tu cuenta en este dispositivo?')) logout(); };
+$('logout').onclick = () => {
+  const pending = S.queue.length ? ' Tienes ' + countOf(S.queue.length, 'cambio', 'cambios') + ' sin enviar a la hoja: se perderán.' : '';
+  if (confirm('¿Salir de tu cuenta en este dispositivo?' + pending)) logout();
+};
 window.addEventListener('online', () => sync());
 document.addEventListener('visibilitychange', () => { if (!document.hidden && S.token && Date.now() - (S.lastSync || 0) > 60000) sync(); });
 

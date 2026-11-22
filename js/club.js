@@ -69,7 +69,7 @@ function viewDay(d) {
   h += '<div class="grid2"><div><label for="dayTime">' + (d.match ? 'Partido' : 'Hora') + '</label><input id="dayTime" type="time" value="' + esc(normTime(d.time)) + '" data-chg="dayTime" data-day="' + esc(d.id) + '"' + (edit ? '' : ' disabled') + '></div>';
   if (d.match) h += '<div><label for="dayMeet">Convocatoria</label><input id="dayMeet" type="time" value="' + esc(normTime(d.meet)) + '" data-chg="dayMeet" data-day="' + esc(d.id) + '"' + (edit ? '' : ' disabled') + '></div>';
   h += '</div></div>';
-  if (parts.length > 1) h += '<div class="chips">' + parts.map((p, i) => '<button class="btn' + (S.part === p ? ' on' : '') + '" data-act="part" data-part="' + esc(p) + '">' + (i + 1) + '. ' + esc(p) + '</button>').join('') + '</div>';
+  if (parts.length > 1) h += '<div class="parts">' + parts.map((p, i) => '<button class="btn' + (S.part === p ? ' on' : '') + '" data-act="part" data-part="' + esc(p) + '">' + (i + 1) + '. ' + esc(p) + '</button>').join('') + '</div>';
   if (S.part === 'Convocatoria') h += partSquad(d);
   else if (S.part === 'Acta') h += partReport(d);
   else h += partList(d);
@@ -286,18 +286,23 @@ function eventDialog(dayId, kind) {
   const chips = (name, list, sel) => '<div class="chips">' + list.map(x => '<button type="button" class="btn' + (sel === x[0] ? ' on' : '') + '" data-pick="' + name + '" data-val="' + esc(x[0]) + '">' + esc(x[1]) + '</button>').join('') + '</div>';
   const draw = () => '<form method="dialog"><div class="title">' + (kind === 'goal' ? 'Gol' : 'Tarjeta') + '</div>'
     + (types.length > 1 ? chips('type', types.map(t => [t, t]), type) : '')
-    + '<label>Jugador</label>' + chips('pid', sq.map(p => [p['ID'], p['Nombre']]), pid)
-    + (kind === 'goal' ? '<label>Asistencia (opcional)</label>' + chips('assist', sq.filter(p => p['ID'] !== pid).map(p => [p['ID'], p['Nombre']]), assist) : '')
+    + '<label for="evPid">Jugador</label>' + pickPlayer('evPid', sq, pid, 'Elige jugador')
+    + (kind === 'goal' ? '<label for="evAssist">Asistencia (opcional)</label>' + pickPlayer('evAssist', sq.filter(p => p['ID'] !== pid), assist, 'Sin asistencia') : '')
     + '<label for="minute">Minuto (opcional)</label><input id="minute" inputmode="numeric" maxlength="3">'
-    + '<div class="row end"><button class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok" id="evOk"' + (pid ? '' : ' disabled') + '>Guardar</button></div></form>';
+    + '<div class="row end"><button type="button" class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok" id="evOk"' + (pid ? '' : ' disabled') + '>Guardar</button></div></form>';
   openDialog(draw(), dlg => {
     dlg.onclick = e => {
       const b = e.target.closest('[data-pick]');
       if (!b) return;
       const minute = $('minute').value;
       if (b.dataset.pick === 'type') type = b.dataset.val;
-      if (b.dataset.pick === 'pid') { pid = b.dataset.val; if (assist === pid) assist = ''; }
-      if (b.dataset.pick === 'assist') assist = assist === b.dataset.val ? '' : b.dataset.val;
+      dlg.innerHTML = draw();
+      $('minute').value = minute;
+    };
+    dlg.onchange = e => {
+      if (e.target.id !== 'evPid' && e.target.id !== 'evAssist') return;
+      if (e.target.id === 'evPid') { pid = e.target.value; if (assist === pid) assist = ''; } else assist = e.target.value;
+      const minute = $('minute').value;
       dlg.innerHTML = draw();
       $('minute').value = minute;
     };
@@ -377,11 +382,11 @@ function seasonTrainingsDialog() {
     + '<div class="grid2"><div><label for="stFrom">Desde</label><input id="stFrom" type="date" value="' + today() + '"></div><div><label for="stTo">Hasta</label><input id="stTo" type="date" value="' + end + '"></div></div>'
     + '<label>Días de la semana</label><div class="chips">' + names.map((n, i) => '<button type="button" class="btn" data-wd="' + (i + 1) + '">' + n + '</button>').join('') + '</div>'
     + '<label for="stTime">Hora (opcional)</label><input id="stTime" type="time">'
-    + '<div class="row end"><button class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok">Crear</button></div></form>';
+    + '<div class="row end"><button type="button" class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok">Crear</button></div></form>';
   openDialog(h, dlg => { dlg.onclick = e => { const b = e.target.closest('[data-wd]'); if (b) b.classList.toggle('on'); }; }, dlg => {
     const wds = [...dlg.querySelectorAll('[data-wd].on')].map(b => Number(b.dataset.wd));
     const from = $('stFrom').value, to = $('stTo').value, time = normTime($('stTime').value);
-    if (!wds.length || !from || !to || to < from) { toast('Elige fechas y al menos un día'); return; }
+    if (!wds.length || !from || !to || to < from) { toast('Elige fechas y al menos un día'); return false; }
     const taken = new Set(rows('Entrenamientos').map(r => r['Fecha']));
     const ops = [];
     for (let d = new Date(from + 'T12:00:00'); ymd(d) <= to; d.setDate(d.getDate() + 1)) {
@@ -432,18 +437,17 @@ function removeFine(id) {
 
 function newFineDialog() {
   let pid = '', label = '';
-  const draw = () => '<form method="dialog"><div class="title">Nueva multa</div><label>Jugador</label><div class="chips">'
-    + players().map(p => '<button type="button" class="btn' + (pid === p['ID'] ? ' on' : '') + '" data-pick="pid" data-val="' + esc(p['ID']) + '">' + esc(p['Nombre']) + '</button>').join('') + '</div>'
+  const draw = () => '<form method="dialog"><div class="title">Nueva multa</div><label for="finePid">Jugador</label>' + pickPlayer('finePid', players(), pid, 'Elige jugador')
     + '<label>Motivo</label><div class="chips">' + rules().map(r => '<button type="button" class="btn' + (label === r.label ? ' on' : '') + '" data-pick="rule" data-val="' + esc(r.label) + '">' + esc(r.label) + '</button>').join('') + '</div>'
     + '<input id="fineLabel" maxlength="80" placeholder="Motivo" value="' + esc(label) + '"><label for="fineAmount">Importe en euros</label><input id="fineAmount" inputmode="decimal">'
-    + '<div class="row end"><button class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok">Guardar</button></div></form>';
+    + '<div class="row end"><button type="button" class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok">Guardar</button></div></form>';
   openDialog(draw(), dlg => {
     dlg.onclick = e => {
       const b = e.target.closest('[data-pick]');
       if (!b) return;
       const amt = $('fineAmount').value, typed = $('fineLabel').value;
       label = typed;
-      if (b.dataset.pick === 'pid') pid = b.dataset.val;
+      pid = $('finePid').value;
       let newAmt = amt;
       if (b.dataset.pick === 'rule') { label = b.dataset.val; newAmt = String(ruleFor(label).cents / 100).replace('.', ','); }
       dlg.innerHTML = draw();
@@ -451,7 +455,8 @@ function newFineDialog() {
     };
   }, () => {
     const text = $('fineLabel').value.trim(), c = parseMoney($('fineAmount').value);
-    if (!pid || !text || !c) { toast('Falta el jugador, el motivo o el importe'); return; }
+    pid = $('finePid').value;
+    if (!pid || !text || !c) { toast('Falta el jugador, el motivo o el importe'); return false; }
     send({ t: 'Multas', op: 'u', v: Object.assign({ 'ID': uid(), 'Fecha': today(), 'Jugador ID': pid, 'Importe': amount(c), 'Origen': '', 'Pagada': 'false', 'Temporada': activeSeason() }, fineReason(text)) });
   });
 }
@@ -461,7 +466,7 @@ function rulesDialog() {
   const draw = () => '<form method="dialog"><div class="title">Tarifas del equipo</div>'
     + draft.map((r, i) => '<div class="row nowrap"><input data-rl="' + i + '" value="' + esc(r.label) + '" maxlength="40"><input class="narrow" data-ra="' + i + '" value="' + esc(r.amount) + '" inputmode="decimal" placeholder="€"><button type="button" class="link danger-text" data-rx="' + i + '">Quitar</button></div>').join('')
     + '<button type="button" class="link" data-radd="1">Añadir tarifa</button>'
-    + '<div class="row end"><button class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok">Guardar</button></div></form>';
+    + '<div class="row end"><button type="button" class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok">Guardar</button></div></form>';
   const read = dlg => dlg.querySelectorAll('[data-rl]').forEach(inp => { const i = Number(inp.dataset.rl); draft[i].label = inp.value; draft[i].amount = dlg.querySelector('[data-ra="' + i + '"]').value; });
   openDialog(draw(), dlg => {
     dlg.onclick = e => {
@@ -471,7 +476,7 @@ function rulesDialog() {
   }, dlg => {
     read(dlg);
     const clean = draft.map(r => ({ label: r.label.trim(), cents: parseMoney(r.amount) })).filter(r => r.label);
-    if (clean.some(r => r.cents === null)) { toast('Revisa los importes'); return; }
+    if (clean.some(r => r.cents === null)) { toast('Revisa los importes'); return false; }
     const before = rules();
     const ops = before.filter(r => !clean.some(c => c.label === r.label)).map(r => ({ t: 'Tarifas', op: 'd', v: { 'Motivo': r.label } }));
     clean.forEach(c => {
@@ -542,7 +547,7 @@ function payDialog(kind, id, pid) {
   const h = '<form method="dialog"><div class="title">Cobrar</div><div class="small">' + esc(title) + '</div><p>Falta: <b>' + money(item.rest) + '</b></p>'
     + '<label for="payAmount">Lo que paga ahora (€)</label><input id="payAmount" inputmode="decimal" value="' + esc(String(item.rest / 100).replace('.', ',')) + '">'
     + (credit > 0 ? '<button type="button" class="btn" data-credit="1">Pagar con su saldo (' + money(Math.min(credit, item.rest)) + ')</button>' : '')
-    + '<div class="row end"><button class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok">Cobrar</button></div></form>';
+    + '<div class="row end"><button type="button" class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok">Cobrar</button></div></form>';
   openDialog(h, dlg => {
     dlg.onclick = e => {
       if (!e.target.dataset.credit) return;
@@ -550,11 +555,11 @@ function payDialog(kind, id, pid) {
       send([{ t: 'Contabilidad', op: 'u', v: { 'ID': uid(), 'Fecha': today(), 'Tipo': 'Traspaso', 'Categoría': 'Multa', 'Concepto': 'Multa: ' + item.label + ' (de su saldo)',
         'Importe': amount(c), 'Multa ID': id, 'Registrado por': by(), 'Jugador ID': pid, 'Cargo ID': '', 'Temporada': activeSeason() } }]
         .concat(c >= item.rest ? [{ t: 'Multas', op: 'e', v: { 'ID': id, 'Pagada': 'true' } }] : []));
-      dlg.close('cancel');
+      closeDialog();
     };
   }, () => {
     const c = parseMoney($('payAmount').value);
-    if (!c) { toast('Pon un importe'); return; }
+    if (!c) { toast('Pon un importe'); return false; }
     if (kind === 'fine') {
       send([{ t: 'Contabilidad', op: 'u', v: { 'ID': uid(), 'Fecha': today(), 'Tipo': 'Ingreso', 'Categoría': 'Multa', 'Concepto': 'Multa: ' + item.label,
         'Importe': amount(c), 'Multa ID': id, 'Registrado por': by(), 'Jugador ID': pid, 'Cargo ID': '', 'Temporada': activeSeason() } }]
@@ -576,7 +581,7 @@ function chargeDialog(pids, onlyOne) {
     + '<label for="chConcept">Motivo</label><input id="chConcept" maxlength="80"><label for="chAmount">Importe por jugador (€)</label><input id="chAmount" inputmode="decimal">'
     + (onlyOne ? '' : '<label>Jugadores</label><div class="chips"><button type="button" class="btn' + (chosen.size === all.length ? ' on' : '') + '" data-pick="all">Todos</button>'
       + all.map(p => '<button type="button" class="btn' + (chosen.has(p['ID']) ? ' on' : '') + '" data-pick="pid" data-val="' + esc(p['ID']) + '">' + esc(p['Nombre']) + '</button>').join('') + '</div>')
-    + '<div class="row end"><button class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok">Guardar</button></div></form>';
+    + '<div class="row end"><button type="button" class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok">Guardar</button></div></form>';
   openDialog(draw(), dlg => {
     dlg.onclick = e => {
       const b = e.target.closest('[data-pick]');
@@ -590,7 +595,7 @@ function chargeDialog(pids, onlyOne) {
     };
   }, () => {
     const c = parseMoney($('chAmount').value);
-    if (!category || !c || !chosen.size) { toast('Falta la categoría, el importe o los jugadores'); return; }
+    if (!category || !c || !chosen.size) { toast('Falta la categoría, el importe o los jugadores'); return false; }
     const concept = $('chConcept').value.trim();
     send(all.filter(p => chosen.has(p['ID'])).map(p => ({ t: 'Cargos', op: 'u', v: { 'ID': uid(), 'Fecha': today(), 'Jugador ID': p['ID'], 'Categoría': category,
       'Concepto': concept, 'Importe': amount(c), 'Registrado por': by(), 'Temporada': activeSeason() } })));
@@ -696,24 +701,25 @@ function movementDialog() {
       + '<label for="mvDate">Fecha</label><input id="mvDate" type="date" value="' + today() + '">'
       + '<label>Categoría</label><div class="chips">' + cats.map(c => '<button type="button" class="btn' + (category === c ? ' on' : '') + '" data-pick="cat" data-val="' + c + '">' + c + '</button>').join('') + '</div>'
       + '<label for="mvConcept">Motivo</label><input id="mvConcept" maxlength="80"><label for="mvAmount">Importe en euros</label><input id="mvAmount" inputmode="decimal">'
-      + '<label>Jugador (opcional)</label><div class="chips">' + players().map(p => '<button type="button" class="btn' + (pid === p['ID'] ? ' on' : '') + '" data-pick="pid" data-val="' + esc(p['ID']) + '">' + esc(p['Nombre']) + '</button>').join('') + '</div>'
-      + '<div class="row end"><button class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok">Guardar</button></div></form>';
+      + '<label for="mvPid">Jugador (opcional)</label>' + pickPlayer('mvPid', players(), pid, 'Ninguno')
+      + '<div class="row end"><button type="button" class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok">Guardar</button></div></form>';
   };
   openDialog(draw(), dlg => {
     dlg.onclick = e => {
       const b = e.target.closest('[data-pick]');
       if (!b) return;
-      if (b.dataset.pick === 'kind' && b.dataset.val === 'Cargo a jugador') { dlg.close('cancel'); chargeDialog([], false); return; }
+      if (b.dataset.pick === 'kind' && b.dataset.val === 'Cargo a jugador') { closeDialog(); chargeDialog([], false); return; }
       const keep = [$('mvDate').value, $('mvConcept').value, $('mvAmount').value];
+      pid = $('mvPid').value;
       if (b.dataset.pick === 'kind') { kind = b.dataset.val; category = ''; }
       if (b.dataset.pick === 'cat') category = b.dataset.val;
-      if (b.dataset.pick === 'pid') pid = pid === b.dataset.val ? '' : b.dataset.val;
       dlg.innerHTML = draw();
       $('mvDate').value = keep[0]; $('mvConcept').value = keep[1]; $('mvAmount').value = keep[2];
     };
   }, () => {
     const c = parseMoney($('mvAmount').value);
-    if (!category || !c) { toast('Falta la categoría o el importe'); return; }
+    pid = $('mvPid').value;
+    if (!category || !c) { toast('Falta la categoría o el importe'); return false; }
     send({ t: 'Contabilidad', op: 'u', v: { 'ID': uid(), 'Fecha': $('mvDate').value || today(), 'Tipo': kind, 'Categoría': category, 'Concepto': $('mvConcept').value.trim(),
       'Importe': amount(c), 'Multa ID': '', 'Registrado por': by(), 'Jugador ID': pid, 'Cargo ID': '', 'Temporada': activeSeason() } });
   });
@@ -761,7 +767,7 @@ function seasonsDialog() {
     + '<div class="title mt">Nueva temporada</div><label for="snName">Nombre</label><input id="snName" value="' + start + '/' + (start + 1) + '">'
     + '<div class="grid2"><div><label for="snFrom">Desde</label><input id="snFrom" type="date" value="' + start + '-07-01"></div><div><label for="snTo">Hasta</label><input id="snTo" type="date" value="' + (start + 1) + '-06-30"></div></div>'
     + '<p class="small">La nueva pasa a ser la activa: lo nuevo se guarda en ella. Las demás quedan para consultar.</p>'
-    + '<div class="row end"><button class="btn" value="cancel">Cerrar</button><button class="btn primary" value="ok">Crear temporada</button></div></form>';
+    + '<div class="row end"><button type="button" class="btn" value="cancel">Cerrar</button><button class="btn primary" value="ok">Crear temporada</button></div></form>';
   const activate = name => list.map(t => ({ t: 'Temporadas', op: 'e', v: { 'Nombre': t['Nombre'], 'Activa': t['Nombre'] === name ? 'true' : 'false' } }));
   openDialog(h, dlg => {
     dlg.onclick = e => {
@@ -770,12 +776,12 @@ function seasonsDialog() {
       if (b.dataset.sact === 'activate') send(activate(b.dataset.name));
       else send({ t: 'Temporadas', op: 'd', v: { 'Nombre': b.dataset.name } });
       S.viewSeason = '';
-      dlg.close('cancel');
+      closeDialog();
     };
   }, () => {
     const name = $('snName').value.trim();
-    if (!name || list.some(t => t['Nombre'] === name)) { toast('Ese nombre ya existe o está vacío'); return; }
-    if (!confirm('¿Crear la temporada ' + name + ' y hacerla la activa?')) return;
+    if (!name || list.some(t => t['Nombre'] === name)) { toast('Ese nombre ya existe o está vacío'); return false; }
+    if (!confirm('¿Crear la temporada ' + name + ' y hacerla la activa?')) return false;
     send(list.map(t => ({ t: 'Temporadas', op: 'e', v: { 'Nombre': t['Nombre'], 'Activa': 'false' } }))
       .concat([{ t: 'Temporadas', op: 'u', v: { 'Nombre': name, 'Desde': $('snFrom').value, 'Hasta': $('snTo').value, 'Activa': 'true' } }]));
     S.viewSeason = '';
