@@ -132,6 +132,7 @@ const ACT = {
   noticeFor: ds => noticeForDialog(ds.day, ds.pid),
   addEvent: ds => eventDialog(ds.day, ds.kind),
   removeEvent: ds => send({ t: 'Acta', op: 'd', v: { 'ID': ds.id } }),
+  cardFine: ds => send({ t: 'Acta', op: 'e', v: { 'ID': ds.id, 'Multa': ds.val } }),
   mvp: ds => setMvp(ds.day, ds.pid),
   editRules: () => rulesDialog(),
   newFine: () => newFineDialog(),

@@ -264,8 +264,13 @@ function partReport(d) {
   h += '<h2>Goles (' + goals.length + ')</h2>' + (goals.length ? '' : '<p class="small">Ninguno apuntado.</p>');
   goals.forEach(e => { h += row([playerName(e['Jugador ID']), e['Minuto'] ? 'min. ' + e['Minuto'] : '', e['Asistencia ID'] ? 'asist. ' + playerName(e['Asistencia ID']) : ''].filter(Boolean).join(' · '), e['ID']); });
   h += '<h2>Tarjetas (' + cards.length + ')</h2>' + (cards.length ? '' : '<p class="small">Ninguna.</p>');
-  cards.forEach(e => { h += row([e['Tipo'], playerName(e['Jugador ID']), e['Minuto'] ? 'min. ' + e['Minuto'] : ''].filter(Boolean).join(' · '), e['ID']); });
-  if (cards.length) h += '<p class="small">Cada tarjeta crea su multa en la hoja al sincronizar (la doble amarilla, sin importe hasta que lo ponga la directiva).</p>';
+  cards.forEach(e => {
+    // Blank (older cards) or "Sí" carries a fine; "No" = part of the game.
+    const fined = String(e['Multa'] || '').trim() !== 'No';
+    const flip = editing ? '<button class="link" data-act="cardFine" data-id="' + esc(e['ID']) + '" data-val="' + (fined ? 'No' : 'Sí') + '">' + (fined ? 'Quitar multa' : 'Poner multa') + '</button>' : '';
+    h += row([e['Tipo'], playerName(e['Jugador ID']), e['Minuto'] ? 'min. ' + e['Minuto'] : '', fined ? 'con multa' : 'sin multa'].filter(Boolean).join(' · '), e['ID']).replace('</span>', '</span>' + flip);
+  });
+  if (cards.length) h += '<p class="small">Las tarjetas con multa la crean en la hoja al sincronizar (la doble amarilla, sin importe hasta que lo ponga la directiva). Las de lance del juego no se pagan.</p>';
   const mvp = (events.find(e => e['Tipo'] === 'MVP') || {})['Jugador ID'];
   h += '<h2>Mejor jugador (MVP)</h2><div class="chips">' + sq.map(p => '<button class="btn' + (mvp === p['ID'] ? ' on' : '') + '" data-act="mvp" data-pid="' + esc(p['ID']) + '" data-day="' + esc(d.id) + '"' + (editing ? '' : ' disabled') + '>' + esc(p['Nombre']) + '</button>').join('') + '</div>';
   return h;
@@ -282,33 +287,31 @@ function eventDialog(dayId, kind) {
   const d = findDay(dayId);
   const sq = players().filter(p => squad(d).includes(p['ID']));
   const types = kind === 'goal' ? ['Gol'] : CARDS;
-  let type = types[0], pid = '', assist = '';
-  const chips = (name, list, sel) => '<div class="chips">' + list.map(x => '<button type="button" class="btn' + (sel === x[0] ? ' on' : '') + '" data-pick="' + name + '" data-val="' + esc(x[0]) + '">' + esc(x[1]) + '</button>').join('') + '</div>';
+  let type = types[0], pid = '', assist = '', fine = '';
+  const select = (id, list, sel, empty) => '<select id="' + id + '" class="full">' + (empty ? '<option value="">' + esc(empty) + '</option>' : '')
+    + list.map(x => '<option value="' + esc(x[0]) + '"' + (sel === x[0] ? ' selected' : '') + '>' + esc(x[1]) + '</option>').join('') + '</select>';
   const draw = () => '<form method="dialog"><div class="title">' + (kind === 'goal' ? 'Gol' : 'Tarjeta') + '</div>'
-    + (types.length > 1 ? chips('type', types.map(t => [t, t]), type) : '')
+    + (types.length > 1 ? '<label for="evType">Tarjeta</label>' + select('evType', types.map(t => [t, t]), type) : '')
     + '<label for="evPid">Jugador</label>' + pickPlayer('evPid', sq, pid, 'Elige jugador')
     + (kind === 'goal' ? '<label for="evAssist">Asistencia (opcional)</label>' + pickPlayer('evAssist', sq.filter(p => p['ID'] !== pid), assist, 'Sin asistencia') : '')
+    + (kind === 'card' ? '<label for="evFine">¿Paga multa?</label>' + select('evFine', [['Sí', 'Sí: fue intencionada, la paga'], ['No', 'No: lance del juego']], fine, 'Elige') : '')
     + '<label for="minute">Minuto (opcional)</label><input id="minute" inputmode="numeric" maxlength="3">'
-    + '<div class="row end"><button type="button" class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok" id="evOk"' + (pid ? '' : ' disabled') + '>Guardar</button></div></form>';
+    + '<div class="row end"><button type="button" class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok" id="evOk"' + (pid && (kind !== 'card' || fine) ? '' : ' disabled') + '>Guardar</button></div></form>';
   openDialog(draw(), dlg => {
-    dlg.onclick = e => {
-      const b = e.target.closest('[data-pick]');
-      if (!b) return;
-      const minute = $('minute').value;
-      if (b.dataset.pick === 'type') type = b.dataset.val;
-      dlg.innerHTML = draw();
-      $('minute').value = minute;
-    };
     dlg.onchange = e => {
-      if (e.target.id !== 'evPid' && e.target.id !== 'evAssist') return;
-      if (e.target.id === 'evPid') { pid = e.target.value; if (assist === pid) assist = ''; } else assist = e.target.value;
+      const id = e.target.id;
+      if (['evPid', 'evAssist', 'evType', 'evFine'].indexOf(id) < 0) return;
+      if (id === 'evPid') { pid = e.target.value; if (assist === pid) assist = ''; }
+      else if (id === 'evAssist') assist = e.target.value;
+      else if (id === 'evType') type = e.target.value;
+      else fine = e.target.value;
       const minute = $('minute').value;
       dlg.innerHTML = draw();
       $('minute').value = minute;
     };
   }, () => {
     send({ t: 'Acta', op: 'u', v: { 'ID': uid(), 'Partido ID': dayId, 'Tipo': type, 'Jugador ID': pid, 'Minuto': $('minute').value.replace(/\D/g, '').slice(0, 3),
-      'Asistencia ID': assist !== pid ? assist : '', 'Temporada': d.season || activeSeason() } });
+      'Asistencia ID': assist !== pid ? assist : '', 'Multa': kind === 'card' ? fine : '', 'Temporada': d.season || activeSeason() } });
   });
 }
 
