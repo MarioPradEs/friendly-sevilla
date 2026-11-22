@@ -193,13 +193,27 @@ document.addEventListener('submit', e => {
 
 // ---------- sign-in ----------
 async function onGoogle(resp) {
-  $('loginMsg').textContent = 'Entrando…';
+  const msg = $('loginMsg');
+  msg.className = 'error';
+  msg.textContent = 'Entrando…';
+  const name = $('loginName').value.trim();
+  store.set('loginName', name);
   try {
-    const a = await api({ action: 'login', idToken: resp.credential });
+    // The name only matters the first time: an unknown account is left as a request for the directiva.
+    const a = await api({ action: 'login', idToken: resp.credential, nombre: name });
     if (!a.ok) {
-      $('loginMsg').textContent = a.error === 'NO_AUTORIZADO'
-        ? 'Tu cuenta (' + (a.email || '') + ') no está dada de alta. Pide a la directiva que te añada en Usuarios.'
-        : 'No se ha podido entrar (' + a.error + ').';
+      const who = a.email ? ' (' + a.email + ')' : '';
+      if (a.error === 'PENDIENTE') {
+        msg.className = 'ok';
+        msg.textContent = 'Solicitud enviada' + who + '. Podrás entrar cuando la directiva te acepte.';
+      } else if (a.error === 'FALTA_NOMBRE') {
+        msg.textContent = 'Tu cuenta' + who + ' aún no tiene acceso. Escribe tu nombre debajo y vuelve a entrar con Google para pedirlo.';
+        $('loginName').focus();
+      } else if (a.error === 'LLENO') {
+        msg.textContent = 'Ahora hay demasiadas solicitudes pendientes. Avisa a la directiva.';
+      } else {
+        msg.textContent = 'No se ha podido entrar (' + a.error + ').';
+      }
       return;
     }
     S.token = a.token;
@@ -233,7 +247,9 @@ function startGoogle() {
 function show() {
   $('login').classList.toggle('hidden', !!S.token);
   $('app').classList.toggle('hidden', !S.token);
-  if (S.token) render(); else startGoogle();
+  if (S.token) { render(); return; }
+  if (!$('loginName').value) $('loginName').value = store.get('loginName', '');
+  startGoogle();
 }
 
 $('refresh').onclick = () => sync();

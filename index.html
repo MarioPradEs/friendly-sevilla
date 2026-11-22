@@ -87,6 +87,8 @@ input.narrow { width: 90px; flex-shrink: 0; }
 .kit.on { background: var(--red); border-color: var(--red); color: #111; }
 #login { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px; text-align: center; }
 #login img { width: 150px; }
+.login-name { width: min(320px, 100%); text-align: left; }
+#loginMsg.ok { color: var(--gold); }
 #login h1 { margin: 0; font-size: 24px; }
 dialog { background: var(--surface); color: var(--text); border: 0; border-radius: 18px; padding: 18px; width: min(94vw, 520px); max-height: 90vh; overflow: auto; }
 dialog::backdrop { background: rgba(0,0,0,.6); }
@@ -108,8 +110,12 @@ dialog.fallback { display: block; position: fixed; top: 5vh; left: 50%; transfor
 <div id="login" class="hidden">
   <img src="escudo.svg" alt="Escudo del Friendly Sevilla">
   <h1>Friendly Sevilla Club</h1>
-  <div class="small">Entra con la cuenta de Google que tiene la directiva apuntada.</div>
+  <div class="small">Entra con tu cuenta de Google. Si es tu primera vez, escribe antes tu nombre y la directiva recibirá tu solicitud.</div>
   <div id="gbtn"></div>
+  <div class="login-name">
+    <label for="loginName">Tu nombre (la primera vez, para pedir acceso)</label>
+    <input id="loginName" type="text" maxlength="40" autocomplete="name" placeholder="Nombre y apellido">
+  </div>
   <div id="loginMsg" class="error"></div>
 </div>
 
