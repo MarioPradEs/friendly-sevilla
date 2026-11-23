@@ -1,6 +1,7 @@
 'use strict';
 /** What each version brought, newest first, for the directiva. Add a line here with every change. */
 const CHANGELOG = [
+  ["0.25.1", "23/11/2026", ["En la plantilla, primero jugador o portero y luego la posición"]],
   ["0.25.0", "23/11/2026", ["Porteros por parte en el acta", "Goles en contra por portero", "Estadísticas de portero en el portal", "Partes y partidos a cero de cada portero"]],
   ["0.24.0", "22/11/2026", ["Botón «Asistiré»", "Jugadores y porteros que van", "Recordatorio por WhatsApp", "Aviso «Ningún portero ha dicho que va»", "Aviso de multas sin pagar en el portal", "Pasar lista según avisos", "Asistencia y racha en el portal", "Estadísticas en el portal", "Cumpleaños", "Cómo llegar en entrenos y partidos", "Próximo partido destacado", "Votación del MVP (obligatoria tras el partido)", "Top 3 de votos para elegir el MVP", "Novedades y cambios"]],
   ["0.23.0", "22/11/2026", ["Tarjeta con o sin multa", "Desplegables", "Rival «Otro equipo»"]],
