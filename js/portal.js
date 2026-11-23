@@ -270,7 +270,8 @@ function attendanceCard(me) {
     .sort((a, b) => a.date.localeCompare(b.date) || String(a.time).localeCompare(String(b.time)))
     .map(d => { const s = markOf(d.id, me)['Estado']; return s === 'OK' || s === 'Tarde' ? true : s === 'Falta' ? false : null; });
   const s = stats(me);
-  const played = s.goals + s.assists + s.yellows + s.reds + s.mvps > 0;
+  const k = keeperStats(me);
+  const played = k.parts > 0 || s.goals + s.assists + s.yellows + s.reds + s.mvps > 0;
   if (!trail.length && !played) return '';
   const counted = trail.filter(x => x !== null);
   const percent = counted.length ? Math.floor(counted.filter(Boolean).length * 100 / counted.length) + ' %' : '—';
@@ -281,7 +282,10 @@ function attendanceCard(me) {
     + '<div class="right-text"><div class="small">Racha</div><div class="bold">' + (streak ? '🔥 ' + streak + (streak === 1 ? ' seguido' : ' seguidos') : 'Empieza hoy') + '</div></div></div>'
     + '<div class="dots">' + dots + '</div>'
     + '<div class="statline">' + [['⚽', s.goals, 'Goles'], ['🅰️', s.assists, 'Asist.'], ['🟨', s.yellows, 'Amarillas'], ['🟥', s.reds, 'Rojas'], ['⭐', s.mvps, 'MVP']]
-      .map(x => '<div><div class="bold">' + x[0] + ' ' + x[1] + '</div><div class="small">' + x[2] + '</div></div>').join('') + '</div></div>';
+      .map(x => '<div><div class="bold">' + x[0] + ' ' + x[1] + '</div><div class="small">' + x[2] + '</div></div>').join('') + '</div>'
+    + (k.parts ? '<div class="statline">' + [['🧤', k.conceded, 'Encajados'], ['🛡️', k.clean, 'Partes a cero'], ['🥅', k.cleanMatches, 'Partidos a cero'], ['⏱️', k.parts, 'Partes jugadas']]
+      .map(x => '<div><div class="bold">' + x[0] + ' ' + x[1] + '</div><div class="small">' + x[2] + '</div></div>').join('') + '</div>' : '')
+    + '</div>';
 }
 
 /** Day and month of someone's birthday, "11-27": the sheet sends others only that ("Cumple"). */

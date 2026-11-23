@@ -1,6 +1,7 @@
 'use strict';
 /** What each version brought, newest first, for the directiva. Add a line here with every change. */
 const CHANGELOG = [
+  ["0.25.0", "23/11/2026", ["Porteros por parte en el acta", "Goles en contra por portero", "Estadísticas de portero en el portal", "Partes y partidos a cero de cada portero"]],
   ["0.24.0", "22/11/2026", ["Botón «Asistiré»", "Jugadores y porteros que van", "Recordatorio por WhatsApp", "Aviso «Ningún portero ha dicho que va»", "Aviso de multas sin pagar en el portal", "Pasar lista según avisos", "Asistencia y racha en el portal", "Estadísticas en el portal", "Cumpleaños", "Cómo llegar en entrenos y partidos", "Próximo partido destacado", "Votación del MVP (obligatoria tras el partido)", "Top 3 de votos para elegir el MVP", "Novedades y cambios"]],
   ["0.23.0", "22/11/2026", ["Tarjeta con o sin multa", "Desplegables", "Rival «Otro equipo»"]],
   ["0.22.1", "22/11/2026", ["La app abre en el portal del jugador"]],
@@ -159,6 +160,7 @@ const ACT = {
   applyFines: ds => applyFines(ds.day),
   noticeFor: ds => noticeForDialog(ds.day, ds.pid),
   addEvent: ds => eventDialog(ds.day, ds.kind),
+  addKeeper: ds => keeperDialog(ds.day, ds.kind),
   removeEvent: ds => send({ t: 'Acta', op: 'd', v: { 'ID': ds.id } }),
   cardFine: ds => send({ t: 'Acta', op: 'e', v: { 'ID': ds.id, 'Multa': ds.val } }),
   mvp: ds => setMvp(ds.day, ds.pid),

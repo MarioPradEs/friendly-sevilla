@@ -307,6 +307,20 @@ function partReport(d) {
     h += row([e['Tipo'], playerName(e['Jugador ID']), e['Minuto'] ? 'min. ' + e['Minuto'] : '', fined ? 'con multa' : 'sin multa'].filter(Boolean).join(' · '), e['ID']).replace('</span>', '</span>' + flip);
   });
   if (cards.length) h += '<p class="small">Las tarjetas con multa la crean en la hoja al sincronizar (la doble amarilla, sin importe hasta que lo ponga la directiva). Las de lance del juego no se pagan.</p>';
+  // Who was in goal in each part, and on whom each rival goal went: the goalkeepers' numbers.
+  h += '<h2>Porteros</h2>';
+  ['1', '2'].forEach(part => {
+    const ks = events.filter(e => e['Tipo'] === 'Portero' && String(e['Parte']) === part);
+    if (!ks.length) h += '<p class="small">' + part + 'ª parte: sin portero</p>';
+    ks.forEach(e => { h += row(part + 'ª parte · ' + playerName(e['Jugador ID']), e['ID']); });
+  });
+  const against = events.filter(e => e['Tipo'] === 'Gol en contra')
+    .sort((a, b) => String(a['Parte']).localeCompare(String(b['Parte'])) || (Number(a['Minuto']) || 999) - (Number(b['Minuto']) || 999));
+  h += '<h2>Goles en contra (' + against.length + ')</h2>';
+  against.forEach(e => { h += row([playerName(e['Jugador ID']), e['Parte'] ? e['Parte'] + 'ª parte' : '', e['Minuto'] ? 'min. ' + e['Minuto'] : ''].filter(Boolean).join(' · '), e['ID']); });
+  const missing = Math.max((parseInt(d.ga, 10) || 0) - against.length, 0);
+  if (missing) h += '<p class="small bold warn">' + (missing === 1 ? 'Falta 1 gol en contra' : 'Faltan ' + missing + ' goles en contra') + ' por poner a un portero.</p>';
+  if (editing) h += '<div class="row mt"><button class="btn" data-act="addKeeper" data-kind="keeper" data-day="' + esc(d.id) + '">+ Portero</button><button class="btn" data-act="addKeeper" data-kind="against" data-day="' + esc(d.id) + '">+ Gol en contra</button></div>';
   const mvp = (events.find(e => e['Tipo'] === 'MVP') || {})['Jugador ID'];
   const votes = rows('Votos MVP').filter(v => v['Partido ID'] === d.id);
   if (ROLE() === 'Directiva' && (votes.length || voteOpen(d))) {
@@ -361,6 +375,62 @@ function eventDialog(dayId, kind) {
     send({ t: 'Acta', op: 'u', v: { 'ID': uid(), 'Partido ID': dayId, 'Tipo': type, 'Jugador ID': pid, 'Minuto': $('minute').value.replace(/\D/g, '').slice(0, 3),
       'Asistencia ID': assist !== pid ? assist : '', 'Multa': kind === 'card' ? fine : '', 'Temporada': d.season || activeSeason() } });
   });
+}
+
+/** A goalkeeper in a part (or both), or a rival goal on the keeper who was in goal then. */
+function keeperDialog(dayId, kind) {
+  const d = findDay(dayId);
+  const sq = players().filter(p => squad(d).includes(p['ID'])).sort((a, b) => isKeeper(b) - isKeeper(a));
+  const inGoal = part => (rows('Acta').find(x => x['Partido ID'] === dayId && x['Tipo'] === 'Portero' && String(x['Parte']) === part) || {})['Jugador ID'] || '';
+  const parts = kind === 'keeper' ? [['1', '1ª parte'], ['2', '2ª parte'], ['12', 'Las dos partes']] : [['1', '1ª parte'], ['2', '2ª parte']];
+  let part = '1', pid = kind === 'against' ? inGoal('1') : '';
+  const select = (id, list, sel) => '<select id="' + id + '" class="full">' + list.map(x => '<option value="' + esc(x[0]) + '"' + (sel === x[0] ? ' selected' : '') + '>' + esc(x[1]) + '</option>').join('') + '</select>';
+  const draw = () => '<form method="dialog"><div class="title">' + (kind === 'keeper' ? 'Portero' : 'Gol en contra') + '</div>'
+    + '<label for="kpPart">Parte</label>' + select('kpPart', parts, part)
+    + '<label for="kpPid">Portero</label>' + pickPlayer('kpPid', sq, pid, 'Elige portero')
+    + (kind === 'keeper' ? '<p class="small">Si se cambia por lesión, añade también al que entró.</p>' : '<label for="minute">Minuto (opcional)</label><input id="minute" inputmode="numeric" maxlength="3">')
+    + '<div class="row end"><button type="button" class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok"' + (pid ? '' : ' disabled') + '>Guardar</button></div></form>';
+  openDialog(draw(), dlg => {
+    dlg.onchange = e => {
+      if (e.target.id === 'kpPart') { part = e.target.value; if (kind === 'against' && inGoal(part)) pid = inGoal(part); }
+      else if (e.target.id === 'kpPid') pid = e.target.value;
+      else return;
+      const minute = $('minute') ? $('minute').value : '';
+      dlg.innerHTML = draw();
+      if ($('minute')) $('minute').value = minute;
+    };
+  }, () => {
+    const base = { 'Partido ID': dayId, 'Jugador ID': pid, 'Asistencia ID': '', 'Multa': '', 'Temporada': d.season || activeSeason() };
+    if (kind === 'against') {
+      send({ t: 'Acta', op: 'u', v: Object.assign({ 'ID': uid(), 'Tipo': 'Gol en contra', 'Parte': part, 'Minuto': $('minute').value.replace(/\D/g, '').slice(0, 3) }, base) });
+      return;
+    }
+    // Each part keeps the same keeper once.
+    const ops = part.split('').filter(p => !rows('Acta').some(x => x['Partido ID'] === dayId && x['Tipo'] === 'Portero' && String(x['Parte']) === p && x['Jugador ID'] === pid))
+      .map(p => ({ t: 'Acta', op: 'u', v: Object.assign({ 'ID': uid(), 'Tipo': 'Portero', 'Parte': p, 'Minuto': '' }, base) }));
+    if (ops.length) send(ops);
+  });
+}
+
+/**
+ * A goalkeeper's season: parts played, goals let in and parts with none. A part is clean only once
+ * the match has its result and every goal against is on a goalkeeper. A clean match is one played
+ * whole without the rival scoring.
+ */
+function keeperStats(pid) {
+  const ev = rows('Acta').filter(x => { const d = findDay(x['Partido ID']); return d && inSeason(d.row); });
+  let parts = 0, clean = 0, cleanMatches = 0;
+  const days = [...new Set(ev.filter(x => x['Tipo'] === 'Portero' && x['Jugador ID'] === pid).map(x => x['Partido ID']))];
+  days.forEach(id => {
+    const mine = [...new Set(ev.filter(x => x['Partido ID'] === id && x['Tipo'] === 'Portero' && x['Jugador ID'] === pid).map(x => String(x['Parte'])))];
+    parts += mine.length;
+    const d = findDay(id);
+    const result = parseInt(d.ga, 10);
+    const against = ev.filter(x => x['Partido ID'] === id && x['Tipo'] === 'Gol en contra');
+    if (!isNaN(result) && against.length >= result) clean += mine.filter(p => !against.some(x => String(x['Parte']) === p)).length;
+    if (result === 0 && mine.includes('1') && mine.includes('2')) cleanMatches++;
+  });
+  return { parts: parts, conceded: ev.filter(x => x['Tipo'] === 'Gol en contra' && x['Jugador ID'] === pid).length, clean: clean, cleanMatches: cleanMatches };
 }
 
 function setMvp(dayId, pid) {
