@@ -11,55 +11,25 @@ function viewHome() {
   // What the player still owes in fines, to be paid before the next match.
   const owed = me ? fines(f => f.player === me).reduce((s, f) => s + f.rest, 0) : 0;
   if (owed > 0) h += '<div class="card"><span class="bold warn">Llevas ' + money(owed) + ' sin pagar en multas. Págalas antes del próximo partido.</span></div>';
-  // The next match, big, at the top: who against, when, what to wear and how to get there.
+  // For the staff, what is left to do comes first, each a tap from its day.
+  h += todoCard(todoList());
+  const meRow = me ? rows('Jugadores').find(r => r['ID'] === me) : null;
+  const meCoach = isCoach(meRow);
   const nextMatch = upcoming.find(d => d.match && d.gf === '');
-  if (nextMatch) h += nextMatchCard(nextMatch);
+  // The first day still without my answer, if it is not the match: right at the top, so nobody forgets.
+  const toAnswer = me ? upcoming.find(d => d !== nextMatch && !noticeOf(d.id, me) && canAnswer(d, me, meCoach)) : null;
+  if (toAnswer) h += '<h2>Te falta responder</h2>' + dayCard(toAnswer, me, meCoach, false);
+  // The next match, big, with the answer right there; it is not repeated below.
+  if (nextMatch) h += dayCard(nextMatch, me, meCoach, true);
   // Matches still being voted, where this player was called up.
   if (me) allDays().filter(d => voteOpen(d) && squad(d).includes(me)).forEach(d => { h += voteCard(d, me); });
   h += birthdayCard();
   if (me) h += attendanceCard(me);
-  h += '<h2>Próximos días</h2>';
+  if (meCoach) h += coachCard(me);
+  const rest = upcoming.filter(d => d !== nextMatch && d !== toAnswer);
+  if (rest.length) h += '<h2>Próximos días</h2>';
   if (!upcoming.length) h += '<p class="small">No hay nada apuntado todavía.</p>';
-  upcoming.forEach(d => {
-    const sq = d.match ? squad(d) : [];
-    const called = !!me && sq.includes(me);
-    // The squad is only shown once the coach or the directiva confirm it.
-    const confirmed = d.match && d.confirmed && sq.length > 0;
-    const n = me ? noticeOf(d.id, me) : null;
-    h += '<div class="card"><div class="title">' + esc(dayTitle(d)) + '</div>';
-    h += '<div class="small">' + esc([fdate(d.date), d.time ? 'a las ' + d.time : d.match ? 'hora por confirmar' : '', d.side].filter(Boolean).join(' · ')) + '</div>';
-    if (d.meet) h += '<div class="small">Convocatoria: ' + esc(d.meet) + '</div>';
-    if (d.ground) h += '<div class="small">' + esc(d.ground + (d.address ? ' · ' + d.address : '')) + '</div>';
-    if (d.match && me) h += '<div class="small bold">' + (!confirmed ? 'Convocatoria aún sin confirmar' : called ? 'Estás convocado' : 'No estás convocado') + '</div>';
-    if (confirmed && called) {
-      const p = rows('Jugadores').find(r => r['ID'] === me);
-      const keeper = p && isKeeper(p) ? keeperKits(me) : [];
-      if (keeper.length) h += '<div class="small bold">Portero: trae siempre tus dos equipaciones, ' + esc(kitOptions(keeper)) + '</div>';
-      else {
-        const kit = matchKits().find(k => k.name === d.kit);
-        if (kit) h += '<div class="small bold">Juegas con la ' + esc(kit.description) + '</div>';
-        h += '<div class="small">Lleva siempre las dos equipaciones.</div>';
-      }
-    }
-    if (confirmed) {
-      const names = players().filter(p => sq.includes(p['ID'])).map(p => (p['Dorsal'] ? '#' + p['Dorsal'] + ' ' : '') + p['Nombre']);
-      h += '<div class="small">Convocados (' + names.length + '): ' + esc(names.join(', ')) + '</div>';
-    }
-    if (n) h += '<div class="notice">' + esc(noticeText(n, null, true)) + '</div>';
-    // Before the squad is confirmed anyone can warn; after, in a match only the squad warns.
-    if (me && (!d.match || !confirmed || called)) {
-      h += '<div class="row"><button class="btn" data-act="warn" data-type="No puedo ir" data-day="' + esc(d.id) + '" data-pid="' + esc(me) + '">No puedo ir</button>'
-        + '<button class="btn" data-act="warn" data-type="Llego tarde" data-day="' + esc(d.id) + '" data-pid="' + esc(me) + '">Llego tarde</button></div>';
-      // So the coach and the directiva know who is coming; the list is still taken on the day.
-      if (!n || n['Tipo'] !== 'Asistiré') h += '<div class="row"><button class="btn primary" data-act="warn" data-type="Asistiré" data-day="' + esc(d.id) + '" data-pid="' + esc(me) + '">Asistiré</button></div>';
-    }
-    h += '<div>';
-    if (n) h += '<button class="link" data-act="unwarn" data-day="' + esc(d.id) + '" data-pid="' + esc(me) + '">Quitar aviso</button>';
-    // The match's own link, else the club's or the rival's ground; trainings at the club's.
-    const maps = d.match ? groundOf(d).maps : ((clubTeam() || {}).maps || '');
-    if (/^https:\/\//.test(maps || '')) h += '<a class="link" href="' + esc(maps) + '" target="_blank" rel="noopener">Cómo llegar</a>';
-    h += '<button class="link" data-act="ics" data-day="' + esc(d.id) + '">Añadir al calendario</button></div></div>';
-  });
+  rest.forEach(d => { h += dayCard(d, me, meCoach, false); });
   const played = all.filter(d => d.match && d.date < t && d.gf !== '').sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
   if (played.length) {
     h += '<h2>Últimos resultados</h2>';
@@ -67,10 +37,117 @@ function viewHome() {
       const goals = rows('Acta').filter(x => x['Partido ID'] === d.id && x['Tipo'] === 'Gol').map(x => playerName(x['Jugador ID']));
       const mvps = rows('Acta').filter(x => x['Partido ID'] === d.id && x['Tipo'] === 'MVP').map(x => playerName(x['Jugador ID']));
       h += '<div class="card"><div class="title">' + esc(TEAM + ' ' + d.gf + ' – ' + d.ga + ' ' + d.title) + '</div>'
-        + '<div class="small">' + esc([fdate(d.date), goals.length ? 'Goles: ' + goals.join(', ') : '', mvps.length ? 'MVP: ' + mvps.join(' y ') + ' ⭐' : ''].filter(Boolean).join(' · ')) + '</div></div>';
+        + '<div class="small">' + esc([fdate(d.date), goals.length ? 'Goles: ' + goals.join(', ') : '', mvps.length ? 'MVP: ' + mvps.join(' y ') + ' ⭐' : '', ledText(d.id)].filter(Boolean).join(' · ')) + '</div></div>';
     });
   }
   return h;
+}
+
+/** Before the squad is confirmed anyone can answer, which helps the coach pick it; after, in a match only the squad (and the coaches). */
+function canAnswer(d, me, meCoach) {
+  if (!me) return false;
+  const sq = d.match ? squad(d) : [];
+  return !d.match || !d.confirmed || !sq.length || sq.includes(me) || meCoach;
+}
+
+/** What is stored in the sheet, and what the button says. */
+const ANSWERS = [['Asistiré', 'Voy'], ['Llego tarde', 'Tarde'], ['No puedo ir', 'No voy']];
+
+/** One coming day as the player sees it; the next match ("hero") in the club's black and gold. */
+function dayCard(d, me, meCoach, hero) {
+  const sq = d.match ? squad(d) : [];
+  const called = !!me && sq.includes(me);
+  // The squad is only shown once the coach or the directiva confirm it.
+  const confirmed = d.match && d.confirmed && sq.length > 0;
+  const n = me ? noticeOf(d.id, me) : null;
+  const answers = canAnswer(d, me, meCoach);
+  let h = '<div class="card' + (hero ? ' match-card' : '') + '">';
+  if (hero) h += nextMatchHead(d);
+  else {
+    h += '<div class="title">' + esc(dayTitle(d)) + '</div>';
+    h += '<div class="small">' + esc([fdate(d.date), d.time ? 'a las ' + d.time : d.match ? 'hora por confirmar' : '', d.side].filter(Boolean).join(' · ')) + '</div>';
+    if (d.meet) h += '<div class="small">Quedamos a las ' + esc(d.meet) + '</div>';
+    if (d.ground) h += '<div class="small">' + esc(d.ground + (d.address ? ' · ' + d.address : '')) + '</div>';
+  }
+  if (d.match && me && !meCoach) h += '<div class="small bold">' + (!confirmed ? 'Convocados aún sin confirmar' : called ? 'Estás convocado' : 'No estás convocado') + '</div>';
+  if (confirmed && called) {
+    const p = rows('Jugadores').find(r => r['ID'] === me);
+    const keeper = p && isKeeper(p) ? keeperKits(me) : [];
+    if (keeper.length) h += '<div class="small bold">Portero: trae siempre tus dos equipaciones, ' + esc(kitOptions(keeper)) + '</div>';
+    else {
+      // The hero already shows the match kit.
+      const kit = matchKits().find(k => k.name === d.kit);
+      if (kit && !hero) h += '<div class="small bold">Juegas con la ' + esc(kit.description) + '</div>';
+      h += '<div class="small">Lleva siempre las dos equipaciones.</div>';
+    }
+  }
+  if (confirmed) {
+    const names = squadPlayers().filter(p => sq.includes(p['ID'])).map(p => (p['Dorsal'] ? '#' + p['Dorsal'] + ' ' : '') + p['Nombre']);
+    h += '<div class="small">Convocados (' + names.length + '): ' + esc(names.join(', ')) + '</div>';
+  }
+  if (answers) {
+    // One row, the main answer first; the chosen one is filled, and tapping it again takes it back.
+    h += '<div class="answer">' + ANSWERS.map(a => {
+      const chosen = !!n && n['Tipo'] === a[0];
+      const main = chosen || (!n && a[0] === 'Asistiré');
+      return '<button class="btn' + (main ? ' primary' : '') + '" data-act="' + (chosen ? 'unwarn' : 'warn') + '" data-type="' + esc(a[0]) + '" data-day="' + esc(d.id) + '" data-pid="' + esc(me) + '">'
+        + (chosen ? '✓ ' : '') + a[1] + '</button>';
+    }).join('') + '</div>';
+  }
+  if (n) h += '<div class="notice">' + esc(ownNoticeText(n) + (answers ? ' · tócalo otra vez para quitarlo' : '')) + '</div>';
+  // Answers are still taken after the deadline: it only tells him he is late.
+  if (answers && !n && d.deadline) h += '<div class="small' + (deadlinePassed(d) ? ' bold warn">El plazo para responder terminó' : '">Responde antes del ' + esc(deadlineText(d.deadline))) + '</div>';
+  h += '<div class="row">';
+  // The match's own link, else the club's or the rival's ground; trainings at the club's.
+  const maps = d.match ? groundOf(d).maps : ((clubTeam() || {}).maps || '');
+  if (/^https:\/\//.test(maps || '')) h += '<a class="btn" href="' + esc(maps) + '" target="_blank" rel="noopener">📍 Cómo llegar</a>';
+  h += '<button class="btn" data-act="ics" data-day="' + esc(d.id) + '">📅 Calendario</button></div></div>';
+  return h;
+}
+
+/**
+ * What the directiva, the coach or the list still has to do, most urgent first: a list to take, a
+ * call-up to confirm, a report to fill in, fines to collect. Only what this person can do, and only recent days.
+ */
+function todoList() {
+  if (!editable()) return [];
+  const iso = today();
+  const shift = n => { const x = new Date(iso + 'T12:00:00'); x.setDate(x.getDate() + n); return ymd(x); };
+  const week = shift(7), lastWeeks = shift(-14);
+  const ds = days(activeSeason()).sort((a, b) => a.date.localeCompare(b.date));
+  const out = [];
+  if (can.mark()) {
+    ds.filter(d => d.date >= lastWeeks && d.date <= iso && unmarked(d).length && !(d.match && !calledUp(d).length))
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .forEach(d => {
+        const now = d.date === iso;
+        out.push({ text: (now ? 'Pasar lista hoy: ' : 'Lista sin pasar: ') + dayTitle(d) + (now ? '' : ' del ' + shortDay(d.date)) + ' · ' + unmarked(d).length + ' sin marcar', day: d.id });
+      });
+  }
+  if (can.callUp()) {
+    ds.filter(d => d.match && d.date >= iso && d.date <= week && !d.confirmed).forEach(d => {
+      const w = whoCounts(d);
+      out.push({ text: 'Convocatoria sin confirmar: ' + dayTitle(d) + ' del ' + shortDay(d.date) + ' · ✅' + w.going.length + ' ❔' + w.silent.length, day: d.id });
+    });
+  }
+  if (can.report()) {
+    ds.filter(d => d.match && d.date >= lastWeeks && d.date < iso && calledUp(d).length).filter(d => {
+      const ev = rows('Acta').filter(x => x['Partido ID'] === d.id);
+      const againstMissing = (parseInt(d.ga, 10) || 0) > ev.filter(x => x['Tipo'] === 'Gol en contra').length;
+      return d.gf === '' || d.ga === '' || againstMissing || ev.filter(x => x['Tipo'] === 'Gol').length < (parseInt(d.gf, 10) || 0);
+    }).forEach(d => out.push({ text: 'Acta por completar: ' + dayTitle(d) + ' del ' + shortDay(d.date), day: d.id }));
+  }
+  if (can.collect()) {
+    const owed = fines(f => f.rest > 0 && inSeason(f.row, activeSeason()));
+    if (owed.length) out.push({ text: countOf(owed.length, 'multa', 'multas') + ' por cobrar · ' + money(owed.reduce((s, f) => s + f.rest, 0)), day: '' });
+  }
+  return out;
+}
+/** Each line opens where it is done: its day, or the fines when it has none. */
+function todoCard(todos) {
+  if (!todos.length) return '';
+  return '<div class="card todo"><div class="bold">📋 Pendiente</div>'
+    + todos.map(x => '<button class="todo-line" data-act="todo" data-day="' + esc(x.day) + '"><span>' + esc(x.text) + '</span><span class="arrow">›</span></button>').join('') + '</div>';
 }
 
 function viewMoney() {
@@ -135,7 +212,8 @@ function viewProfile() {
   const me = S.yo.jugadorId;
   const p = rows('Jugadores').find(r => r['ID'] === me);
   if (!p) return '<p class="small">Tu cuenta no está unida a ningún jugador. Pide a la directiva que ponga tu Jugador ID en la pestaña Usuarios.</p>';
-  let h = '<div class="card"><div class="title">' + esc((p['Dorsal'] ? '#' + p['Dorsal'] + ' ' : '') + p['Nombre']) + '</div><div class="small">' + esc(p['Posición'] || '') + '</div></div>';
+  let h = '<div class="card"><div class="title">' + esc((p['Dorsal'] ? '#' + p['Dorsal'] + ' ' : '') + p['Nombre']) + (isCoach(p) ? ' <span class="small">🧢 Entrenador</span>' : '') + '</div>'
+    + (isCoach(p) ? '' : '<div class="small">' + esc(p['Posición'] || '') + '</div>') + '</div>';
   h += '<p class="small">El nombre y el dorsal los cambia la directiva. Teléfono, nacimiento y contacto de emergencia solo los ven la directiva y el entrenador.</p><form id="profile">';
   PROFILE.forEach(f => { h += '<label for="pf-' + esc(f[0]) + '">' + esc(f[1]) + '</label><input id="pf-' + esc(f[0]) + '" name="' + esc(f[0]) + '" type="' + f[2] + '" value="' + esc(p[f[0]] || '') + '" maxlength="80">'; });
   return h + '<div class="row"><button class="btn primary" type="submit">Guardar mis datos</button></div></form>';
@@ -163,7 +241,7 @@ function warnDialog(dayId, type, pid) {
   // Nothing to ask for "Asistiré": it is saved straight away.
   if (type === 'Asistiré') {
     send({ t: 'Avisos', op: 'u', v: { 'Día ID': dayId, 'Fecha': d.date, 'Jugador ID': pid, 'Tipo': type, 'Hora llegada': '', 'Motivo': '', 'Temporada': d.season, 'Avisado': '', 'A tiempo': '' } });
-    toast(own ? 'Apuntado: asistirás' : 'Aviso apuntado');
+    toast(own ? 'Apuntado: vas' : 'Aviso apuntado');
     return;
   }
   let h = '<form method="dialog"><div class="title">' + esc(type) + (own ? '' : ' · ' + esc(playerName(pid))) + '</div><div class="small">' + esc(dayTitle(d) + ' · ' + fdate(d.date)) + '</div>';
@@ -214,7 +292,7 @@ function calendar(dayId) {
   lines.push('SUMMARY:' + clean(title));
   const place = groundOf(d);
   if (place.ground || d.address) lines.push('LOCATION:' + clean([place.ground, d.address].filter(Boolean).join(', ')));
-  if (d.match && d.meet) lines.push('DESCRIPTION:' + clean('Convocatoria: ' + normTime(d.meet)));
+  if (d.match && d.meet) lines.push('DESCRIPTION:' + clean('Quedamos a las ' + normTime(d.meet)));
   lines.push('END:VEVENT', 'END:VCALENDAR');
   const ics = lines.join('\r\n');
   // An iPhone app on the home screen does not download files: opening the event directly offers to add it.
@@ -288,6 +366,18 @@ function attendanceCard(me) {
     + '</div>';
 }
 
+/** The coach's own record: matches he led this season with their result in. */
+function coachCard(me) {
+  const c = coachStats(me);
+  const streak = !c.streak ? '—' : c.streak + ' ' + ({ V: ['victoria', 'victorias seguidas'], E: ['empate', 'empates seguidos'], D: ['derrota', 'derrotas seguidas'] }[c.last][c.streak === 1 ? 0 : 1]);
+  return '<div class="card"><div class="title">🧢 Como entrenador</div>'
+    + '<div class="statline">' + [[c.matches, 'Partidos dirigidos'], [c.won + ' V · ' + c.drawn + ' E · ' + c.lost + ' D', 'Balance'], [c.matches ? Math.round(c.won * 100 / c.matches) + ' %' : '—', '% victorias']]
+      .map(x => '<div><div class="bold">' + esc(x[0]) + '</div><div class="small">' + x[1] + '</div></div>').join('') + '</div>'
+    + '<div class="statline">' + [[c.gf + ' / ' + c.ga, 'Goles a favor / en contra'], [streak, 'Racha actual']]
+      .map(x => '<div><div class="bold">' + esc(x[0]) + '</div><div class="small">' + x[1] + '</div></div>').join('') + '</div>'
+    + (c.matches ? '' : '<div class="small mt">Aún no hay partidos con resultado en los que conste que dirigiste.</div>') + '</div>';
+}
+
 /** Day and month of someone's birthday, "11-27": the sheet sends others only that ("Cumple"). */
 function birthdayOf(p) {
   if (p['Cumple']) return String(p['Cumple']);
@@ -312,7 +402,7 @@ function birthdayCard() {
   let h = '<div class="card">';
   now.forEach(x => {
     h += '<div class="row between"><span class="bold">🎂 ¡Hoy cumple ' + esc(x.p['Nombre']) + '!</span>'
-      + (can.club() ? '<button class="link" data-act="congratulate" data-pid="' + esc(x.p['ID']) + '">Felicitar</button>' : '') + '</div>';
+      + (can.club() ? '<button class="btn sm" data-act="congratulate" data-pid="' + esc(x.p['ID']) + '">Felicitar</button>' : '') + '</div>';
   });
   if (soon.length) h += '<div class="small">🎈 Esta semana: ' + esc(soon.map(x => x.p['Nombre'] + ' (' + days[x.date.getDay()] + ' ' + x.date.getDate() + ')').join(' · ')) + '</div>';
   return h + '</div>';
@@ -321,8 +411,8 @@ function birthdayText(pid) {
   return '🎉 *¡Feliz cumpleaños, ' + playerName(pid) + '!* 🎂' + String.fromCharCode(10, 10) + 'De parte de todo el ' + TEAM + '. ¡A celebrarlo! 🥳⚽';
 }
 
-/** The next match at a glance, in the club's black and gold. */
-function nextMatchCard(d) {
+/** The next match at a glance, in the club's black and gold: the top of its card. */
+function nextMatchHead(d) {
   const days = Math.round((new Date(d.date + 'T12:00:00') - new Date(today() + 'T12:00:00')) / 86400000);
   const count = days === 0 ? 'HOY' : days === 1 ? 'MAÑANA' : 'EN ' + days + ' DÍAS';
   const rival = d.title.trim() || 'Rival por confirmar';
@@ -330,14 +420,13 @@ function nextMatchCard(d) {
   const names = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
   const dt = new Date(d.date + 'T12:00:00');
   // Until the committee meeting the match may have no time yet.
-  const when = [names[dt.getDay()] + ' ' + dt.getDate() + '/' + (dt.getMonth() + 1), d.time || 'hora por confirmar', d.meet ? 'convocatoria ' + d.meet : ''].filter(Boolean).join(' · ');
+  const when = [names[dt.getDay()] + ' ' + dt.getDate() + '/' + (dt.getMonth() + 1), d.time || 'hora por confirmar', d.meet ? 'quedamos a las ' + d.meet : ''].filter(Boolean).join(' · ');
   const g = groundOf(d);
-  const kit = (typeof matchKits === 'function' ? matchKits() : []).find(k => k.name === d.kit);
-  return '<div class="card match-card"><div class="row between"><span class="gold small bold">PRÓXIMO ' + esc(d.label.toUpperCase()) + '</span><span class="pill">' + count + '</span></div>'
+  const kit = matchKits().find(k => k.name === d.kit);
+  return '<div class="row between"><span class="gold small bold">PRÓXIMO ' + esc(d.label.toUpperCase()) + '</span><span class="pill">' + count + '</span></div>'
     + '<div class="match-title">' + esc(title) + '</div><div class="gold">' + esc(when) + '</div>'
     + (g.ground ? '<div class="small">📍 ' + esc(g.ground) + '</div>' : '')
-    + '<div class="row between mt"><span>' + (kit ? esc(kit.name) : '') + '</span>'
-    + (/^https:\/\//.test(g.maps || '') ? '<a class="btn gold-btn" href="' + esc(g.maps) + '" target="_blank" rel="noopener">Cómo llegar</a>' : '') + '</div></div>';
+    + (kit ? '<div class="small">👕 ' + esc(kit.name) + '</div>' : '');
 }
 
 // ---------- MVP vote: secret, never oneself, the match day and the next ----------
@@ -367,22 +456,31 @@ function voteUntil(d) {
   return days[c.getDay()] + ' ' + c.getDate() + '/' + (c.getMonth() + 1) + ' a las ' + String(c.getHours()).padStart(2, '0') + ':' + String(c.getMinutes()).padStart(2, '0');
 }
 /** The match this player must still vote for, if any. */
+/** Matches whose vote was left for later ("Más tarde"): asked again on the next page load. */
+const voteLater = new Set();
 function pendingVote(me) {
-  return allDays().find(d => voteOpen(d) && squad(d).includes(me) && !myVote(d.id, me));
+  return allDays().find(d => voteOpen(d) && squad(d).includes(me) && !myVote(d.id, me) && !voteLater.has(d.id));
 }
-/** The vote nobody can skip: no Escape, no closing; it goes once the vote is sent. */
+/** The vote after a match: it can wait ("Más tarde") but comes back each time the page opens until it is in; the card on Inicio stays. */
 function votePrompt() {
   const me = S.yo && S.yo.jugadorId;
   const dlg = $('dlg');
   if (!me || !S.datos || (dlg.open && dlg.dataset.vote)) return;
   const d = pendingVote(me);
   if (!d || dlg.open) return;
-  const options = players().filter(p => squad(d).includes(p['ID']) && p['ID'] !== me);
+  const options = squadPlayers().filter(p => squad(d).includes(p['ID']) && p['ID'] !== me);
   const match = d.side === 'Visitante' ? (d.title.trim() || 'el rival') + ' vs ' + TEAM : TEAM + ' vs ' + (d.title.trim() || 'el rival');
-  openDialog('<form method="dialog"><div class="title">⭐ Vota al MVP</div><p>' + esc(match) + '. Elige al mejor de tus compañeros para seguir. Tu voto es secreto y no se puede cambiar.</p>'
+  openDialog('<form method="dialog"><div class="title">⭐ Vota al MVP</div><p>' + esc(match) + '. Elige al mejor de tus compañeros. Tu voto es secreto y no se puede cambiar.</p>'
     + pickPlayer('promptVote', options, '', 'Elige a un compañero')
     + '<p class="small">Puedes votar hasta el ' + esc(voteUntil(d)) + '.</p>'
-    + '<div class="row end"><button class="btn primary" value="ok">Votar</button></div></form>', null, () => {
+    + '<div class="row end"><button type="button" class="btn" data-later="1">Más tarde</button><button class="btn primary" value="ok">Votar</button></div></form>', box => {
+    box.onclick = e => {
+      if (!e.target.closest('[data-later]')) return;
+      voteLater.add(d.id);
+      delete box.dataset.vote;
+      closeDialog();
+    };
+  }, () => {
     const voted = $('promptVote').value;
     if (!voted) { toast('Elige a un compañero'); return false; }
     send({ t: 'Votos MVP', op: 'u', v: { 'Partido ID': d.id, 'Jugador ID': me, 'Votado ID': voted, 'Temporada': d.season || activeSeason() } });
@@ -390,6 +488,7 @@ function votePrompt() {
     toast('Voto guardado');
   });
   dlg.dataset.vote = d.id;
+  // Only the two buttons close it: Escape would leave the vote neither given nor put off.
   dlg.onkeydown = e => { if (e.key === 'Escape') e.preventDefault(); };
   dlg.oncancel = e => e.preventDefault();
 }
@@ -398,7 +497,7 @@ function myVote(dayId, me) {
 }
 function voteCard(d, me) {
   const cur = myVote(d.id, me);
-  const options = players().filter(p => squad(d).includes(p['ID']) && p['ID'] !== me);
+  const options = squadPlayers().filter(p => squad(d).includes(p['ID']) && p['ID'] !== me);
   const match = d.side === 'Visitante' ? (d.title.trim() || 'el rival') + ' vs ' + TEAM : TEAM + ' vs ' + (d.title.trim() || 'el rival');
   // The vote stays: once given there is nothing to change.
   if (cur) {

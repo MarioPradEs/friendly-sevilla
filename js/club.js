@@ -4,39 +4,51 @@
 
 // ---------- days ----------
 function viewDays() {
-  const list = days().sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
+  const all = days();
+  const t = today();
+  // What is coming first, today on top: a season of trainings would bury it under the past.
+  const coming = all.filter(d => d.date >= t).sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+  const past = all.filter(d => d.date < t).sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
+  // A past season has nothing coming: its days show open.
+  const pastOpen = S.showPast || !coming.length;
   // Who only takes attendance works on the active season and nothing else.
   let h = ROLE() === 'Lista' ? '<h2>Pasar lista</h2>' : seasonBar();
-  if (can.editDays()) {
-    h += '<div class="row"><button class="btn primary" data-act="addDay">+ Añadir día</button><button class="btn" data-act="seasonTrainings">Crear entrenamientos de la temporada</button></div>';
-  }
-  if (!list.length) {
+  if (can.editDays()) h += '<div class="row"><button class="btn primary wide" data-act="addDay">+ Añadir día</button></div>';
+  if (!all.length) {
     h += '<p class="small">' + (editable() ? 'Añade un día de entrenamiento, partido, amistoso o torneo. Puedes prepararlo antes: nadie sale marcado hasta que lo marques ese mismo día.' : 'No hay días en esta temporada.') + '</p>';
   }
-  list.forEach(d => {
-    const marks = marksOf(d.id).filter(m => calledUp(d).includes(m['Jugador ID']));
-    const n = s => marks.filter(m => m['Estado'] === s).length;
-    const unavailable = n('No puede');
-    // Before the list is taken: who said they will come and who said they cannot.
-    const marked = marks.map(m => m['Jugador ID']);
-    const told = rows('Avisos').filter(a => a['Día ID'] === d.id && !marked.includes(a['Jugador ID']));
-    const going = goingLine(told.filter(a => a['Tipo'] === 'Asistiré').map(a => a['Jugador ID'])), notGoing = told.filter(a => a['Tipo'] === 'No puedo ir').length;
-    const result = d.match && d.gf !== '' && d.ga !== '' ? 'Resultado ' + d.gf + '-' + d.ga + verdict(d) : '';
-    const info = [
-      marks.length > unavailable ? (n('OK') + n('Tarde')) + ' de ' + (marks.length - unavailable) + ' vinieron' : '',
-      n('Tarde') ? countOf(n('Tarde'), 'retraso', 'retrasos') : '',
-      n('Falta') ? countOf(n('Falta'), 'falta', 'faltas') : '',
-      unavailable ? countOf(unavailable, 'no puede', 'no pueden') : '',
-      unmarked(d).length ? unmarked(d).length + ' sin marcar' : '',
-      going,
-      notGoing ? countOf(notGoing, 'avisa que no puede', 'avisan que no pueden') : '',
-      notCalledUp(d).length ? countOf(notCalledUp(d).length, 'no convocado', 'no convocados') : '',
-    ].filter(Boolean).join(' · ');
-    h += '<div class="card tap" data-act="openDay" data-day="' + esc(d.id) + '"><div class="title">' + esc(dayTitle(d)) + '</div><div class="small">'
-      + esc(fdate(d.date) + (d.time ? ' · ' + d.time : '')) + '</div>' + (result ? '<div class="small bold">' + esc(result) + '</div>' : '')
-      + '<div class="small">' + esc(info) + '</div>' + (keeperMissing(d) ? '<div class="small bold warn">Ningún portero ha dicho que va</div>' : '') + '</div>';
-  });
+  if (coming.length) h += '<h2>Próximos</h2>' + coming.map(dayRow).join('');
+  if (past.length) {
+    h += '<button class="fold" data-act="togglePast"' + (coming.length ? '' : ' disabled') + '>Pasados (' + past.length + ') ' + (pastOpen ? '▾' : '▸') + '</button>';
+    if (pastOpen) h += past.map(dayRow).join('');
+  }
+  if (can.editDays()) h += '<button class="btn wide mt" data-act="seasonTrainings">Crear entrenamientos de la temporada</button>';
   return h;
+}
+/** One day in the list: what happened or who said what; the arrow says it opens. */
+function dayRow(d) {
+  const marks = marksOf(d.id).filter(m => calledUp(d).includes(m['Jugador ID']));
+  const n = s => marks.filter(m => m['Estado'] === s).length;
+  const unavailable = n('No puede');
+  // Before the list is taken: who said they will come and who said they cannot.
+  const marked = marks.map(m => m['Jugador ID']);
+  const coachIds = coaches().map(p => p['ID']);
+  const told = rows('Avisos').filter(a => a['Día ID'] === d.id && !marked.includes(a['Jugador ID']) && !coachIds.includes(a['Jugador ID']));
+  const going = goingLine(told.filter(a => a['Tipo'] === 'Asistiré').map(a => a['Jugador ID'])), notGoing = told.filter(a => a['Tipo'] === 'No puedo ir').length;
+  const result = d.match && d.gf !== '' && d.ga !== '' ? 'Resultado ' + d.gf + '-' + d.ga + verdict(d) : '';
+  const info = [
+    marks.length > unavailable ? (n('OK') + n('Tarde')) + ' de ' + (marks.length - unavailable) + ' vinieron' : '',
+    n('Tarde') ? countOf(n('Tarde'), 'retraso', 'retrasos') : '',
+    n('Falta') ? countOf(n('Falta'), 'falta', 'faltas') : '',
+    unavailable ? countOf(unavailable, 'no puede', 'no pueden') : '',
+    unmarked(d).length ? unmarked(d).length + ' sin marcar' : '',
+    going,
+    notGoing ? countOf(notGoing, 'avisa que no puede', 'avisan que no pueden') : '',
+    notCalledUp(d).length ? countOf(notCalledUp(d).length, 'no convocado', 'no convocados') : '',
+  ].filter(Boolean).join(' · ');
+  return '<div class="card tap" data-act="openDay" data-day="' + esc(d.id) + '"><div class="row between nowrap head"><span class="title">' + esc(dayTitle(d)) + '</span><span class="arrow">›</span></div><div class="small">'
+    + esc(fdate(d.date) + (d.time ? ' · ' + d.time : '')) + '</div>' + (result ? '<div class="small bold">' + esc(result) + '</div>' : '')
+    + (info ? '<div class="small">' + esc(info) + '</div>' : '') + (keeperMissing(d) ? '<div class="small bold warn">Ningún portero ha dicho que va</div>' : '') + '</div>';
 }
 function verdict(d) {
   const us = Number(d.gf), them = Number(d.ga);
@@ -44,74 +56,184 @@ function verdict(d) {
   return us > them ? ' · Ganamos' : us < them ? ' · Perdimos' : ' · Empate';
 }
 
+/** A new day: only what is needed to create it. Nothing is saved until "Crear"; then it opens. */
 function addDay() {
-  const id = uid();
-  send({ t: 'Entrenamientos', op: 'u', v: { 'ID': id, 'Fecha': today(), 'Temporada': activeSeason() } });
-  S.day = id; S.part = null; render(); window.scrollTo(0, 0);
+  let date = today(), kind = KINDS[0][0], title = '', time = '';
+  const rv = rivals().map(r => r.name).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  const read = () => { date = $('ndDate').value || date; time = $('ndTime').value; if ($('ndRival')) title = $('ndRival').value; };
+  const draw = () => {
+    const training = kind === KINDS[0][0];
+    const rival = !rv.length ? '<input id="ndRival" maxlength="80" value="' + esc(title) + '">'
+      : '<select id="ndRival" class="full"><option value="">Por confirmar</option>' + rv.map(r => '<option' + (r === title ? ' selected' : '') + '>' + esc(r) + '</option>').join('') + '</select>';
+    return '<form method="dialog"><div class="title">Nuevo día</div>'
+      + '<label for="ndDate">Fecha</label><input id="ndDate" type="date" value="' + esc(date) + '">'
+      + '<label>Tipo de día</label><div class="chips">' + KINDS.map(k => '<button type="button" class="btn' + (kind === k[0] ? ' on' : '') + '" data-kind="' + esc(k[0]) + '">' + esc(k[0]) + '</button>').join('') + '</div>'
+      + (training ? '' : '<label for="ndRival">Rival</label>' + rival)
+      + '<label for="ndTime">' + (training ? 'Hora' : 'Hora del partido') + '</label><input id="ndTime" type="time" value="' + esc(time) + '">'
+      + '<div class="row end"><button type="button" class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok">Crear</button></div></form>';
+  };
+  openDialog(draw(), dlg => {
+    dlg.onclick = e => {
+      const b = e.target.closest('[data-kind]');
+      if (!b) return;
+      read();
+      kind = b.dataset.kind;
+      dlg.innerHTML = draw();
+    };
+  }, () => {
+    read();
+    if (!date) { toast('Elige la fecha'); return false; }
+    const id = uid();
+    const k = KINDS.find(x => x[0] === kind);
+    const season = activeSeason();
+    send(k[1] ? { t: 'Partidos', op: 'u', v: { 'ID': id, 'Fecha': date, 'Tipo': k[1], 'Rival': title.trim(), 'Hora partido': normTime(time), 'Temporada': season } }
+      : { t: 'Entrenamientos', op: 'u', v: { 'ID': id, 'Fecha': date, 'Hora': normTime(time), 'Temporada': season } });
+    S.day = id; S.part = null; render(); window.scrollTo(0, 0);
+  });
 }
 
 function viewDay(d) {
-  const lista = ROLE() === 'Lista';
-  if (lista) {
+  const coming = d.date >= today();
+  if (ROLE() === 'Lista') {
     // Like a player, plus the list: the day as it is, nothing of it to change.
     return '<button class="link" data-act="closeDay">‹ Volver</button><div class="card"><div class="title">' + esc(dayTitle(d)) + '</div><div class="small">'
-      + esc([fdate(d.date), d.time ? 'a las ' + d.time : '', d.side].filter(Boolean).join(' · ')) + '</div></div>' + partList(d);
+      + esc([fdate(d.date), d.time ? 'a las ' + d.time : '', d.side].filter(Boolean).join(' · ')) + '</div>'
+      + (coming ? '<div class="row">' + whoButton(d) + '</div>' : '') + '</div>' + partList(d);
   }
-  const parts = d.match && !lista ? ['Convocatoria', 'Pasar lista', 'Acta'] : ['Pasar lista'];
-  if (!parts.includes(S.part)) S.part = d.match && !lista && !squad(d).length ? 'Convocatoria' : 'Pasar lista';
+  const parts = d.match ? ['Convocatoria', 'Pasar lista', 'Acta'] : ['Pasar lista'];
+  // Opens where the work is: no squad yet, the call-up; a match already played, its report; else the list.
+  if (!parts.includes(S.part)) S.part = d.match && !calledUp(d).length ? 'Convocatoria' : d.match && d.date < today() ? 'Acta' : 'Pasar lista';
   const edit = can.editDays();
-  let h = '<div class="row between"><button class="link" data-act="closeDay">‹ Volver</button>'
-    + (can.deleteDays() ? '<button class="btn danger" data-act="deleteDay" data-day="' + esc(d.id) + '">Borrar día</button>' : '') + '</div>';
-  h += '<div class="card">';
-  h += '<label for="dayDate">Fecha</label><input id="dayDate" type="date" value="' + esc(d.date) + '" data-chg="dayDate" data-day="' + esc(d.id) + '"' + (edit ? '' : ' disabled') + '>';
-  h += '<div class="chips mt">' + KINDS.map(k => '<button class="btn' + (d.label === k[0] ? ' on' : '') + '" data-act="dayKind" data-kind="' + esc(k[0]) + '" data-day="' + esc(d.id) + '"' + (edit ? '' : ' disabled') + '>' + esc(k[0]) + '</button>').join('') + '</div>';
-  h += '<label for="dayTitle">' + (d.match ? 'Rival' : 'Nombre (opcional)') + '</label><input id="dayTitle" value="' + esc(d.title) + '" maxlength="80" data-chg="dayTitle" data-day="' + esc(d.id) + '"' + (d.match ? ' list="rivalList"' : '') + (edit ? '' : ' disabled') + '>';
-  if (d.match) {
-    h += '<datalist id="rivalList">' + rivals().map(r => '<option value="' + esc(r.name) + '">').join('') + '</datalist>';
-    h += '<div class="chips mt"><span class="small bold">' + esc(TEAM) + ':</span>' + ['Local', 'Visitante'].map(s => '<button class="btn' + (d.side === s ? ' on' : '') + '" data-act="side" data-side="' + s + '" data-day="' + esc(d.id) + '"' + (edit ? '' : ' disabled') + '>' + s + '</button>').join('') + '</div>';
-    const where = d.side === 'Local' ? 'Jugamos en casa' : d.side === 'Visitante' ? 'Vamos al campo de ' + (d.title.trim() || 'el rival') + (groundOf(d).ground ? ' (' + groundOf(d).ground + ')' : '') : '';
-    if (where) h += '<div class="small">' + esc(where) + '</div>';
+  let h = '<div class="row between nowrap"><button class="link" data-act="closeDay">‹ Volver</button><span class="title grow">' + esc(dayTitle(d)) + '</span>'
+    + (can.deleteDays() ? '<button class="btn sm danger" data-act="deleteDay" data-day="' + esc(d.id) + '">Borrar día</button>' : '') + '</div>';
+  // The day's settings in one line; the pencil opens them, so the list below keeps the room.
+  const head = [fdate(d.date), d.match ? d.side : '', d.time || 'sin hora', d.match && d.meet ? 'quedamos ' + d.meet : '', d.deadline ? 'plazo ' + deadlineText(d.deadline) : ''].filter(Boolean).join(' · ');
+  const open = edit && S.headOpen === d.id;
+  h += edit ? '<button class="field mt" data-act="dayHead" data-day="' + esc(d.id) + '"><span>' + esc(head) + '</span><span class="pen">' + (open ? '▴' : '✏️') + '</span></button>'
+    : '<div class="small mt">' + esc(head) + '</div>';
+  if (open) {
+    h += '<div class="card mt">';
+    h += '<label for="dayDate">Fecha</label><input id="dayDate" type="date" value="' + esc(d.date) + '" data-chg="dayDate" data-day="' + esc(d.id) + '">';
+    h += '<label>Tipo de día</label><div class="chips">' + KINDS.map(k => '<button class="btn' + (d.label === k[0] ? ' on' : '') + '" data-act="dayKind" data-kind="' + esc(k[0]) + '" data-day="' + esc(d.id) + '">' + esc(k[0]) + '</button>').join('') + '</div>';
+    h += '<label for="dayTitle">' + (d.match ? 'Rival' : 'Nombre (opcional)') + '</label><input id="dayTitle" value="' + esc(d.title) + '" maxlength="80" data-chg="dayTitle" data-day="' + esc(d.id) + '"' + (d.match ? ' list="rivalList"' : '') + '>';
+    if (d.match) {
+      h += '<datalist id="rivalList">' + rivals().map(r => '<option value="' + esc(r.name) + '">').join('') + '</datalist>';
+      h += '<div class="chips mt"><span class="small bold">' + esc(TEAM) + ':</span>' + ['Local', 'Visitante'].map(s => '<button class="btn' + (d.side === s ? ' on' : '') + '" data-act="side" data-side="' + s + '" data-day="' + esc(d.id) + '">' + s + '</button>').join('') + '</div>';
+      const where = d.side === 'Local' ? 'Jugamos en casa' : d.side === 'Visitante' ? 'Vamos al campo de ' + (d.title.trim() || 'el rival') + (groundOf(d).ground ? ' (' + groundOf(d).ground + ')' : '') : '';
+      if (where) h += '<div class="small">' + esc(where) + '</div>';
+    }
+    h += '<div class="grid2"><div><label for="dayTime">' + (d.match ? 'Partido' : 'Hora') + '</label><input id="dayTime" type="time" value="' + esc(normTime(d.time)) + '" data-chg="dayTime" data-day="' + esc(d.id) + '"></div>';
+    if (d.match) h += '<div><label for="dayMeet">Quedamos a las</label><input id="dayMeet" type="time" value="' + esc(normTime(d.meet)) + '" data-chg="dayMeet" data-day="' + esc(d.id) + '"></div>';
+    h += '</div>';
+    const choice = deadlineChoice(d);
+    h += '<label for="dayDeadline">Plazo para responder</label><select id="dayDeadline" class="full" data-chg="dayDeadline" data-day="' + esc(d.id) + '">'
+      + [['', 'Sin plazo'], ['1', 'El día antes a las 20:00'], ['2', '2 días antes a las 20:00'], ['3', '3 días antes a las 20:00']]
+        .concat(choice === 'raw' ? [['raw', deadlineText(d.deadline)]] : [])
+        .map(o => '<option value="' + o[0] + '"' + (choice === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>').join('') + '</select>';
+    h += '</div>';
   }
-  h += '<div class="grid2"><div><label for="dayTime">' + (d.match ? 'Partido' : 'Hora') + '</label><input id="dayTime" type="time" value="' + esc(normTime(d.time)) + '" data-chg="dayTime" data-day="' + esc(d.id) + '"' + (edit ? '' : ' disabled') + '></div>';
-  if (d.match) h += '<div><label for="dayMeet">Convocatoria</label><input id="dayMeet" type="time" value="' + esc(normTime(d.meet)) + '" data-chg="dayMeet" data-day="' + esc(d.id) + '"' + (edit ? '' : ' disabled') + '></div>';
-  h += '</div>';
-  if (keeperMissing(d)) h += '<div class="small bold warn">Ningún portero ha dicho que va</div>';
-  // Before the day: remind by WhatsApp those who have not said whether they come.
-  if (can.editDays() && d.date >= today() && d.gf === '') {
+  if (keeperMissing(d)) h += '<div class="small bold warn mt">Ningún portero ha dicho que va</div>';
+  // Who comes only matters before the day; the reminder too, by WhatsApp to those who have not said.
+  if (coming) {
     const silent = silentPlayers(d).length;
-    h += '<button class="btn full mt" data-act="remind" data-day="' + esc(d.id) + '">Recordar por WhatsApp' + (silent ? ' (' + silent + ' sin avisar)' : '') + '</button>';
+    h += '<div class="row nowrap">' + whoButton(d)
+      + (edit && d.gf === '' ? '<button class="btn" data-act="remind" data-day="' + esc(d.id) + '">Recordar' + (silent ? ' (' + silent + ')' : '') + '</button>' : '') + '</div>';
   }
-  h += '</div>';
   if (parts.length > 1) h += '<div class="parts">' + parts.map((p, i) => '<button class="btn' + (S.part === p ? ' on' : '') + '" data-act="part" data-part="' + esc(p) + '">' + (i + 1) + '. ' + esc(p) + '</button>').join('') + '</div>';
   if (S.part === 'Convocatoria') h += partSquad(d);
   else if (S.part === 'Acta') h += partReport(d);
   else h += partList(d);
   return h;
 }
+/** "Quién viene ✅3 ⏰1 ❌1 ❔4": opens the names. */
+function whoButton(d) {
+  const w = whoCounts(d);
+  return '<button class="btn grow who" data-act="who" data-day="' + esc(d.id) + '">Quién viene ✅' + w.going.length + ' ⏰' + w.late.length + ' ❌' + w.cant.length + ' ❔' + w.silent.length + '</button>';
+}
+
+/**
+ * Who comes, from the notices: for those who see everybody's (directiva, coach, list). Coaches go
+ * apart, they are not players. Once the deadline passes, those still silent show as a warning.
+ */
+function whoComes(d) {
+  if (!['Directiva', 'Entrenador', 'Lista'].includes(ROLE())) return '';
+  const w = whoCounts(d);
+  const name = p => p['Nombre'] + (isKeeper(p) ? ' (portero)' : '');
+  const overdue = deadlinePassed(d) && w.silent.length > 0;
+  const group = (title, list, text, cls, note) => '<div class="small' + (cls ? ' ' + cls : '') + '"><span class="bold">' + esc(title + ' (' + list.length + ')' + (note || '')) + '</span>'
+    + (list.length ? ': ' + esc(list.map(text).join(', ')) : '') + '</div>';
+  let h = '<div class="title">Quién viene</div><div class="small">' + esc(dayTitle(d) + ' · ' + fdate(d.date)) + '</div>';
+  if (d.deadline) h += '<div class="small">Plazo para responder: ' + esc(deadlineText(d.deadline)) + '</div>';
+  if (w.who.length) {
+    h += group('✅ Asistirán', w.going, name)
+      + group('⏰ Llegan tarde', w.late, p => { const n = noticeOf(d.id, p['ID']); return name(p) + (n['Hora llegada'] ? ' ' + n['Hora llegada'] : ''); })
+      + group('❌ No pueden', w.cant, p => { const n = noticeOf(d.id, p['ID']); return name(p) + (n['Motivo'] ? ' · ' + n['Motivo'] : ''); })
+      + group('❔ Sin responder', w.silent, name, overdue ? 'bold warn' : '', overdue ? ' (plazo vencido)' : '');
+  } else h += '<div class="small">' + (d.match ? 'Aún no hay convocados.' : 'No hay jugadores.') + '</div>';
+  coaches().forEach(c => {
+    const n = noticeOf(d.id, c['ID']);
+    const state = !n ? 'sin responder' : n['Tipo'] === 'Asistiré' ? 'asistirá' : n['Tipo'] === 'No puedo ir' ? 'no puede' : 'llega tarde' + (n['Hora llegada'] ? ' (' + n['Hora llegada'] + ')' : '');
+    h += '<div class="small mt">🧢 Entrenador: ' + esc(c['Nombre'] + ' · ' + state) + '</div>';
+  });
+  return h;
+}
+function whoDialog(dayId) {
+  const d = findDay(dayId);
+  if (d) openDialog('<form method="dialog">' + whoComes(d) + '<div class="row end"><button type="button" class="btn" value="cancel">Cerrar</button></div></form>');
+}
 
 // ---------- 1. call-up ----------
 function partSquad(d) {
   const sq = squad(d);
   const editing = can.callUp();
-  let h = '<h2>Convocados: ' + sq.filter(id => playerIds().includes(id)).length + ' de ' + MAX_CALLED_UP + ' como máximo</h2>';
+  const size = calledUp(d).length;
+  let h = '<h2>Convocados: ' + size + ' de ' + MAX_CALLED_UP + ' como máximo</h2>';
+  const answered = answeredNotCalled(d);
+  if (editing && answered.length) h += '<button class="btn primary wide" data-act="callUpAnswered" data-day="' + esc(d.id) + '">Convocar a los que van (' + answered.length + ')</button>';
   const kits = matchKits();
   if (kits.length) {
     h += '<div class="chips"><span class="small bold">Equipación:</span>' + kits.map(k => '<button class="btn' + (d.kit === k.name ? ' on' : '') + '" data-act="kit" data-kit="' + esc(k.name) + '" data-day="' + esc(d.id) + '"' + (editing ? '' : ' disabled') + '>' + esc(k.name) + '</button>').join('') + '</div>';
     const chosen = kits.find(k => k.name === d.kit);
-    const keepers = players().filter(p => sq.includes(p['ID']) && isKeeper(p)).map(p => { const o = kitOptions(keeperKits(p['ID'])); return o ? p['Nombre'] + ': ' + o : ''; }).filter(Boolean).join(' · ');
+    const keepers = squadPlayers().filter(p => sq.includes(p['ID']) && isKeeper(p)).map(p => { const o = kitOptions(keeperKits(p['ID'])); return o ? p['Nombre'] + ': ' + o : ''; }).filter(Boolean).join(' · ');
     h += '<p class="small">' + esc([chosen ? chosen.description : '', keepers ? 'porteros, siempre con sus dos: ' + keepers : ''].filter(Boolean).join(' · ') || 'Elige la equipación del partido') + '</p>';
   }
-  const full = sq.filter(id => playerIds().includes(id)).length >= MAX_CALLED_UP;
-  players().forEach(p => {
+  const full = size >= MAX_CALLED_UP;
+  const canNotice = can.mark() && can.fine();
+  squadPlayers().forEach(p => {
     const on = sq.includes(p['ID']);
     const n = noticeOf(d.id, p['ID']);
-    h += '<div class="player row between"><div><div class="name">' + esc(p['Nombre']) + '</div>' + (n ? '<div class="small notice">' + esc(noticeText(n, markOf(d.id, p['ID']))) + '</div>' : '') + '</div>'
-      + '<button class="btn' + (on ? ' on' : '') + '" data-act="callUp" data-pid="' + esc(p['ID']) + '" data-day="' + esc(d.id) + '"' + (editing && (on || !full) ? '' : ' disabled') + '>' + (on ? 'Convocado' : 'No convocado') + '</button></div>';
+    h += '<div class="player row between nowrap"><div class="grow"><div class="name">' + esc(p['Nombre']) + '</div>' + (n ? '<div class="small notice">' + esc(noticeText(n, markOf(d.id, p['ID']))) + '</div>' : '') + '</div>'
+      + '<button class="btn' + (on ? ' on' : '') + '" data-act="callUp" data-pid="' + esc(p['ID']) + '" data-day="' + esc(d.id) + '"' + (editing && (on || !full) ? '' : ' disabled') + '>' + (on ? 'Convocado' : 'No convocado') + '</button>'
+      + (canNotice ? '<button class="box more" data-act="markMenu" data-pid="' + esc(p['ID']) + '" data-day="' + esc(d.id) + '" aria-label="Más">⋯</button>' : '') + '</div>';
   });
-  const size = sq.length;
-  h += '<div class="row mt"><button class="btn primary" data-act="confirmSquad" data-day="' + esc(d.id) + '"' + (editing && size ? '' : ' disabled') + '>' + (d.confirmed ? 'Confirmada ✓' : 'Confirmar') + '</button>'
-    + '<button class="btn" data-act="squadWhatsApp" data-day="' + esc(d.id) + '"' + (size ? '' : ' disabled') + '>WhatsApp</button></div>';
+  // One step: confirming is what the players need, and the group needs the message.
+  if (!d.confirmed) {
+    h += '<div class="row mt"><button class="btn primary wide" data-act="confirmSend" data-day="' + esc(d.id) + '"' + (size ? '' : ' disabled') + '>' + (editing ? 'Confirmar y enviar' : 'Enviar por WhatsApp') + '</button></div>';
+  } else {
+    h += '<div class="row mt nowrap"><button class="btn grow" data-act="confirmSquad" data-day="' + esc(d.id) + '"' + (editing ? '' : ' disabled') + '>✓ Confirmada</button>'
+      + '<button class="btn primary grow" data-act="squadWhatsApp" data-day="' + esc(d.id) + '">Enviar otra vez</button></div>';
+  }
   return h;
+}
+/** Those not called up yet who said they come (or come late), in squad order; never the coaches. */
+function answeredNotCalled(d) {
+  const sq = squad(d);
+  return squadPlayers().map(p => p['ID']).filter(pid => { const n = noticeOf(d.id, pid); return !sq.includes(pid) && n && (n['Tipo'] === 'Asistiré' || n['Tipo'] === 'Llego tarde'); });
+}
+/** One tap calls them all, up to the most a match takes. */
+function callUpAnswered(dayId) {
+  const d = findDay(dayId);
+  if (!d || !d.match || !can.callUp()) return;
+  const add = answeredNotCalled(d).slice(0, Math.max(MAX_CALLED_UP - calledUp(d).length, 0));
+  if (!add.length) { toast('Máximo ' + MAX_CALLED_UP + ' convocados'); return; }
+  send(add.map(pid => ({ t: 'Convocatorias', op: 'u', v: { 'Partido ID': dayId, 'Jugador ID': pid, 'Temporada': d.season || activeSeason() } })));
+}
+/** Confirms the squad (whoever may) and sends it to the group in the same tap. */
+function confirmAndSend(dayId) {
+  const d = findDay(dayId);
+  if (!d) return;
+  if (can.callUp() && !d.confirmed) send({ t: 'Partidos', op: 'e', v: { 'ID': dayId, 'Convocatoria confirmada': 'true' } });
+  shareText(squadText(findDay(dayId)));
 }
 
 /** Leaving someone out clears his marks and this day's unpaid fines; calling him back leaves him unmarked. */
@@ -133,7 +255,7 @@ function squadText(d) {
   const vs = d.side === 'Visitante' ? rival + ' vs ' + TEAM : TEAM + ' vs ' + rival;
   const place = groundOf(d);
   const kit = matchKits().find(k => k.name === d.kit);
-  const sq = players().filter(p => squad(d).includes(p['ID']))
+  const sq = squadPlayers().filter(p => squad(d).includes(p['ID']))
     .sort((a, b) => (Number(a['Dorsal']) || 1e9) - (Number(b['Dorsal']) || 1e9) || String(a['Nombre']).localeCompare(b['Nombre']));
   const L = ['🏆 *CONVOCATORIA ' + TEAM.toUpperCase() + '* 🏆', '', '🆚 *Partido:* ' + vs, '📅 *Fecha:* ' + fdate(d.date),
     '⏰ *Hora partido:* ' + (d.time || 'por confirmar'), '📣 *Convocatoria:* ' + (d.meet || 'por confirmar'), '📍 *Campo:* ' + (place.ground || 'por confirmar')];
@@ -158,25 +280,27 @@ function partList(d) {
   if (marking && left) {
     // "Asistiré" to OK, "No puedo ir" to No puede; the rest stays to be checked.
     const told = fromNotices(d).length;
-    h += '<div class="row between"><span class="small">' + left + ' sin marcar</span><span>'
-      + (told ? '<button class="link" data-act="markNotices" data-day="' + esc(d.id) + '">Según avisos (' + told + ')</button>' : '')
-      + '<button class="link" data-act="markRest" data-day="' + esc(d.id) + '">OK al resto</button></span></div>';
+    h += '<div class="row between"><span class="small">' + left + ' sin marcar</span><span class="row tight">'
+      + (told ? '<button class="btn sm" data-act="markNotices" data-day="' + esc(d.id) + '">Según avisos (' + told + ')</button>' : '')
+      + '<button class="btn sm" data-act="markRest" data-day="' + esc(d.id) + '">OK al resto</button></span></div>';
   }
-  players().filter(p => who.includes(p['ID'])).forEach(p => {
+  squadPlayers().filter(p => who.includes(p['ID'])).forEach(p => {
     const pid = p['ID'];
     const m = markOf(d.id, pid);
     const n = noticeOf(d.id, pid);
-    h += '<div class="player"><div class="row between"><div><div class="name">' + esc(p['Nombre']) + '</div>' + (n ? '<div class="small notice">' + esc(noticeText(n, m)) + '</div>' : '') + '</div>'
-      + (marking && can.fine() ? '<button class="link" data-act="noticeFor" data-pid="' + esc(pid) + '" data-day="' + esc(d.id) + '">Aviso</button>' : '') + '</div><div class="marks">';
-    STATES.forEach(s => {
-      h += '<button class="btn mark-' + s.replace(' ', '') + (m && m['Estado'] === s ? ' on' : '') + '" data-act="mark" data-state="' + esc(s) + '" data-pid="' + esc(pid) + '" data-day="' + esc(d.id) + '"' + (marking ? '' : ' disabled') + '>' + esc(s) + '</button>';
+    const tags = [n ? noticeText(n, m) : '', m && isTrue(m['Equipación incorrecta']) ? '👕 equipación mal' : '', m && m['Estado'] === 'Tarde' && isTrue(m['Justificada']) ? 'retraso justificado' : ''].filter(Boolean);
+    h += '<div class="player"><div class="row between nowrap"><div class="grow"><div class="name">' + esc(p['Nombre']) + '</div>' + (tags.length ? '<div class="small notice">' + esc(tags.join(' · ')) + '</div>' : '') + '</div>';
+    // The three marks of every day in one row; the rarer ones go in the menu.
+    MARKS.forEach(x => {
+      h += '<button class="box ' + x[2] + (m && m['Estado'] === x[0] ? ' on' : '') + '" title="' + esc(x[0]) + '" aria-label="' + esc(x[0]) + '" data-act="mark" data-state="' + esc(x[0]) + '" data-pid="' + esc(pid) + '" data-day="' + esc(d.id) + '"' + (marking ? '' : ' disabled') + '>' + x[1] + '</button>';
     });
-    h += '<button class="btn kit' + (m && isTrue(m['Equipación incorrecta']) ? ' on' : '') + '" data-act="kitIssue" data-pid="' + esc(pid) + '" data-day="' + esc(d.id) + '"' + (marking && came(m) ? '' : ' disabled') + '>Equipación</button>';
-    if (m && m['Estado'] === 'Tarde') h += '<button class="btn' + (isTrue(m['Justificada']) ? ' on' : '') + '" data-act="excuse" data-pid="' + esc(pid) + '" data-day="' + esc(d.id) + '"' + (marking ? '' : ' disabled') + '>Justificada</button>';
+    if (marking) h += '<button class="box more" data-act="markMenu" data-list="1" data-pid="' + esc(pid) + '" data-day="' + esc(d.id) + '" aria-label="Más">⋯</button>';
+    h += '</div>';
     if (m && m['Estado'] === 'No puede') {
-      REASONS.forEach(r => { h += '<button class="btn' + (m['Motivo'] === r ? ' on' : '') + '" data-act="reason" data-reason="' + r + '" data-pid="' + esc(pid) + '" data-day="' + esc(d.id) + '"' + (marking ? '' : ' disabled') + '>' + r + '</button>'; });
+      h += '<div class="row"><span class="small bold">No puede ir</span><select data-chg="absReason" data-pid="' + esc(pid) + '" data-day="' + esc(d.id) + '"' + (marking ? '' : ' disabled') + '><option value="">Motivo</option>'
+        + REASONS.map(r => '<option' + (m['Motivo'] === r ? ' selected' : '') + '>' + r + '</option>').join('') + '</select></div>';
     }
-    h += '</div></div>';
+    h += '</div>';
   });
   if (marking && can.fine()) {
     const toFine = finesToApply(d);
@@ -184,6 +308,40 @@ function partList(d) {
       + (toFine.length ? 'Poner ' + countOf(toFine.length, 'multa', 'multas') + ' · ' + money(toFine.reduce((s, x) => s + x.rule.cents, 0)) : 'Nada que multar') + '</button></div>';
   }
   return h;
+}
+/** [state, symbol, class] of the marks in sight; "No puede" is in the menu. */
+const MARKS = [['OK', '✓', 'ok'], ['Tarde', '⏰', 'late'], ['Falta', '✗', 'miss']];
+/** The rarer things of a player's row: could not come, kit, excused lateness, clearing, his notice. */
+function markMenu(dayId, pid, inList) {
+  const d = findDay(dayId);
+  if (!d) return;
+  const m = markOf(dayId, pid);
+  const n = noticeOf(dayId, pid);
+  const tick = (on, text) => (on ? '✓ ' : '') + text;
+  const opts = [];
+  if (inList && can.mark()) {
+    opts.push(['cant', tick(m && m['Estado'] === 'No puede', 'No puede ir')]);
+    if (came(m)) opts.push(['kit', tick(isTrue(m['Equipación incorrecta']), 'Equipación incorrecta')]);
+    if (m && m['Estado'] === 'Tarde') opts.push(['excuse', tick(isTrue(m['Justificada']), 'Retraso justificado')]);
+    if (m) opts.push(['clear', 'Quitar marca']);
+  }
+  if (can.mark() && can.fine()) opts.push(['notice', n ? 'Cambiar su aviso' : 'Apuntar su aviso']);
+  if (!opts.length) return;
+  openDialog('<form method="dialog"><div class="title">' + esc(playerName(pid)) + '</div><div class="menu">'
+    + opts.map(o => '<button type="button" class="menu-item" data-mm="' + o[0] + '">' + esc(o[1]) + '</button>').join('')
+    + '</div><div class="row end"><button type="button" class="btn" value="cancel">Cerrar</button></div></form>', dlg => {
+    dlg.onclick = e => {
+      const b = e.target.closest('[data-mm]');
+      if (!b) return;
+      closeDialog();
+      const a = b.dataset.mm;
+      if (a === 'cant') mark(dayId, pid, 'No puede');
+      else if (a === 'kit') toggleKitIssue(dayId, pid);
+      else if (a === 'excuse') toggleExcuse(dayId, pid);
+      else if (a === 'clear') { const cur = markOf(dayId, pid); if (cur) send({ t: 'Asistencia', op: 'd', v: { 'ID': cur['ID'] } }); }
+      else noticeForDialog(dayId, pid);
+    };
+  });
 }
 
 /**
@@ -258,8 +416,8 @@ function toggleExcuse(dayId, pid) {
 
 function toggleReason(dayId, pid, reason) {
   const m = markOf(dayId, pid);
-  if (!m || m['Estado'] !== 'No puede') return;
-  send({ t: 'Asistencia', op: 'e', v: { 'ID': m['ID'], 'Motivo': m['Motivo'] === reason ? '' : reason } });
+  if (!m || m['Estado'] !== 'No puede' || m['Motivo'] === reason) return;
+  send({ t: 'Asistencia', op: 'e', v: { 'ID': m['ID'], 'Motivo': reason } });
 }
 
 /** What this day should cost and has not been fined yet: lateness not justified nor warned in time, and kit. */
@@ -287,24 +445,25 @@ function applyFines(dayId) {
 
 // ---------- 3. match report ----------
 function partReport(d) {
-  const sq = players().filter(p => squad(d).includes(p['ID']));
+  const sq = squadPlayers().filter(p => squad(d).includes(p['ID']));
   if (!sq.length) return '<p class="small">Primero hace falta la convocatoria: el acta solo puede nombrar a los convocados.</p>';
   const editing = can.report();
   const events = rows('Acta').filter(x => x['Partido ID'] === d.id);
+  // The result and the goals first: that is what is filled in after every match.
   let h = '<h2>Resultado</h2><div class="grid2"><div><label for="gf">' + esc(TEAM) + '</label><input id="gf" inputmode="numeric" maxlength="2" value="' + esc(d.gf) + '" data-chg="result" data-day="' + esc(d.id) + '"' + (editing ? '' : ' disabled') + '></div>'
     + '<div><label for="ga">' + esc(d.title || 'Rival') + '</label><input id="ga" inputmode="numeric" maxlength="2" value="' + esc(d.ga) + '" data-chg="result" data-day="' + esc(d.id) + '"' + (editing ? '' : ' disabled') + '></div></div>';
   if (editing) h += '<div class="row mt"><button class="btn" data-act="addEvent" data-kind="goal" data-day="' + esc(d.id) + '">+ Gol</button><button class="btn" data-act="addEvent" data-kind="card" data-day="' + esc(d.id) + '">+ Tarjeta</button></div>';
   const goals = events.filter(e => e['Tipo'] === 'Gol').sort((a, b) => (Number(a['Minuto']) || 999) - (Number(b['Minuto']) || 999));
   const cards = events.filter(e => CARDS.includes(e['Tipo']));
-  const row = (text, id) => '<div class="line"><span>' + esc(text) + '</span>' + (editing ? '<button class="link danger-text" data-act="removeEvent" data-id="' + esc(id) + '">Quitar</button>' : '') + '</div>';
+  const row = (text, id, extra) => '<div class="line"><span>' + esc(text) + '</span>' + (editing ? '<span class="right">' + (extra || '') + '<button class="btn sm danger" data-act="removeEvent" data-id="' + esc(id) + '">Quitar</button></span>' : '') + '</div>';
   h += '<h2>Goles (' + goals.length + ')</h2>' + (goals.length ? '' : '<p class="small">Ninguno apuntado.</p>');
   goals.forEach(e => { h += row([playerName(e['Jugador ID']), e['Minuto'] ? 'min. ' + e['Minuto'] : '', e['Asistencia ID'] ? 'asist. ' + playerName(e['Asistencia ID']) : ''].filter(Boolean).join(' · '), e['ID']); });
   h += '<h2>Tarjetas (' + cards.length + ')</h2>' + (cards.length ? '' : '<p class="small">Ninguna.</p>');
   cards.forEach(e => {
     // Blank (older cards) or "Sí" carries a fine; "No" = part of the game.
     const fined = String(e['Multa'] || '').trim() !== 'No';
-    const flip = editing ? '<button class="link" data-act="cardFine" data-id="' + esc(e['ID']) + '" data-val="' + (fined ? 'No' : 'Sí') + '">' + (fined ? 'Quitar multa' : 'Poner multa') + '</button>' : '';
-    h += row([e['Tipo'], playerName(e['Jugador ID']), e['Minuto'] ? 'min. ' + e['Minuto'] : '', fined ? 'con multa' : 'sin multa'].filter(Boolean).join(' · '), e['ID']).replace('</span>', '</span>' + flip);
+    const flip = '<button class="btn sm" data-act="cardFine" data-id="' + esc(e['ID']) + '" data-val="' + (fined ? 'No' : 'Sí') + '">' + (fined ? 'Quitar multa' : 'Poner multa') + '</button>';
+    h += row([e['Tipo'], playerName(e['Jugador ID']), e['Minuto'] ? 'min. ' + e['Minuto'] : '', fined ? 'con multa' : 'sin multa'].filter(Boolean).join(' · '), e['ID'], flip);
   });
   if (cards.length) h += '<p class="small">Las tarjetas con multa la crean en la hoja al sincronizar (la doble amarilla, sin importe hasta que lo ponga la directiva). Las de lance del juego no se pagan.</p>';
   // Who was in goal in each part, and on whom each rival goal went: the goalkeepers' numbers.
@@ -335,7 +494,88 @@ function partReport(d) {
       + votes.map(v => '<div class="small">' + esc(playerName(v['Jugador ID']) + ' → ' + playerName(v['Votado ID'])) + '</div>').join('');
   }
   h += '<h2>Mejor jugador (MVP)</h2><div class="chips">' + sq.map(p => '<button class="btn' + (mvp === p['ID'] ? ' on' : '') + '" data-act="mvp" data-pid="' + esc(p['ID']) + '" data-day="' + esc(d.id) + '"' + (editing ? '' : ' disabled') + '>' + esc(p['Nombre']) + '</button>').join('') + '</div>';
+  // Who led and the coach's notes go last: written once, rarely changed.
+  return h + '<hr>' + benchPart(d, sq) + coachNotePart(d);
+}
+
+// ---------- bench: who led the match ("Dirigió", several allowed), coaches on the bench ("Banquillo"), the coach's private note ----------
+const actaOf = (dayId, type) => rows('Acta').filter(x => x['Partido ID'] === dayId && x['Tipo'] === type);
+/** "Dirigió: Antonio y Luis" / "Dirigieron: ...", '' while nobody is written down. */
+function ledText(dayId) {
+  const names = actaOf(dayId, 'Dirigió').map(x => playerName(x['Jugador ID']));
+  return names.length ? (names.length === 1 ? 'Dirigió: ' : 'Dirigieron: ') + andList(names) : '';
+}
+function benchPart(d, sq) {
+  const editing = can.report();
+  const cs = coaches();
+  const led = actaOf(d.id, 'Dirigió').map(x => x['Jugador ID']);
+  const onBench = actaOf(d.id, 'Banquillo').map(x => x['Jugador ID']);
+  let h = '<h2>Banquillo</h2>';
+  // A coach who cannot come leaves the match with nobody in charge until someone is chosen.
+  if (!led.length) {
+    cs.filter(c => { const n = noticeOf(d.id, c['ID']); return n && n['Tipo'] === 'No puedo ir'; })
+      .forEach(c => { h += '<p class="small bold warn">' + esc(c['Nombre'] + ' no puede ir: elige quién dirige el partido') + '</p>'; });
+  }
+  if (!editing) {
+    const benchNames = onBench.map(playerName);
+    return h + '<p class="small">' + esc([ledText(d.id) || 'Sin apuntar quién dirigió', benchNames.length ? 'En el banquillo: ' + andList(benchNames) : ''].filter(Boolean).join(' · ')) + '</p>';
+  }
+  const box = (chg, p, on) => '<label class="check mt"><input type="checkbox" data-chg="' + chg + '" data-day="' + esc(d.id) + '" data-pid="' + esc(p['ID']) + '"' + (on ? ' checked' : '') + '>'
+    + '<span>' + esc(p['Nombre']) + (isCoach(p) ? ' <span class="small">🧢 Entrenador</span>' : '') + '</span></label>';
+  // Someone written down before who is no longer a candidate still shows, so he can be taken off.
+  const known = cs.concat(sq).map(p => p['ID']);
+  const gone = led.filter(id => !known.includes(id)).map(id => ({ 'ID': id, 'Nombre': playerName(id) }));
+  h += '<div class="bold">Dirigió</div>' + cs.concat(sq, gone).map(p => box('led', p, led.includes(p['ID']))).join('');
+  if (cs.length) h += '<div class="bold mt">Entrenadores en el banquillo</div>' + cs.map(p => box('bench', p, onBench.includes(p['ID']))).join('');
   return h;
+}
+/** Ticking adds the row, unticking removes it. */
+function toggleActa(dayId, type, pid) {
+  const d = findDay(dayId);
+  if (!d || !can.report()) return;
+  const cur = actaOf(dayId, type).filter(x => x['Jugador ID'] === pid);
+  if (cur.length) { send(cur.map(x => ({ t: 'Acta', op: 'd', v: { 'ID': x['ID'] } }))); return; }
+  send({ t: 'Acta', op: 'u', v: { 'ID': uid(), 'Partido ID': dayId, 'Tipo': type, 'Jugador ID': pid, 'Minuto': '', 'Asistencia ID': '', 'Temporada': d.season || activeSeason() } });
+}
+/** The coach's own note on the match: only the coach and the directiva see it (the sheet strips it for the rest too). */
+const seesCoachNote = () => ['Directiva', 'Entrenador'].includes(ROLE());
+const coachNote = dayId => (seesCoachNote() ? actaOf(dayId, 'Nota entrenador')[0] : null);
+function coachNotePart(d) {
+  if (!seesCoachNote()) return '';
+  const n = coachNote(d.id);
+  const text = n ? n['Notas'] || '' : '';
+  if (!can.report()) return text ? '<h2>Notas del entrenador</h2><p class="small">' + esc(text) + '</p>' : '';
+  // Saved a moment after typing stops (main.js), like the rest of the report: no button.
+  return '<label for="coachNote">Notas del entrenador (solo las ven el entrenador y la directiva)</label><textarea id="coachNote" rows="3" maxlength="1000" data-day="' + esc(d.id) + '">' + esc(text) + '</textarea>'
+    + '<div class="small">Se guardan solas al dejar de escribir.</div>';
+}
+/** One note per match; saving it empty removes it. */
+function saveCoachNote(dayId, value) {
+  const d = findDay(dayId);
+  if (!d || !can.report()) return;
+  const text = String(value || '').trim();
+  const cur = coachNote(dayId);
+  if ((cur ? cur['Notas'] || '' : '') === text) return;
+  if (!text) { send({ t: 'Acta', op: 'd', v: { 'ID': cur['ID'] } }); toast('Notas borradas'); return; }
+  send(cur ? { t: 'Acta', op: 'e', v: { 'ID': cur['ID'], 'Notas': text } }
+    : { t: 'Acta', op: 'u', v: { 'ID': uid(), 'Partido ID': dayId, 'Tipo': 'Nota entrenador', 'Jugador ID': '', 'Minuto': '', 'Asistencia ID': '', 'Notas': text, 'Temporada': d.season || activeSeason() } });
+  toast('Notas guardadas');
+}
+
+/**
+ * A coach's matches of the season (chosen like a goalkeeper's): those with his "Dirigió" and both
+ * scores in. The streak is the run of the same outcome counting back from the latest match.
+ */
+function coachStats(pid) {
+  const ds = [...new Set(rows('Acta').filter(x => x['Tipo'] === 'Dirigió' && x['Jugador ID'] === pid).map(x => x['Partido ID']))]
+    .map(findDay).filter(d => d && d.match && inSeason(d.row) && d.gf !== '' && d.ga !== '' && !isNaN(Number(d.gf)) && !isNaN(Number(d.ga)))
+    .sort((a, b) => b.date.localeCompare(a.date) || String(b.time).localeCompare(String(a.time)));
+  const out = ds.map(d => (Number(d.gf) > Number(d.ga) ? 'V' : Number(d.gf) < Number(d.ga) ? 'D' : 'E'));
+  let streak = 0;
+  while (streak < out.length && out[streak] === out[0]) streak++;
+  const sum = k => ds.reduce((s, d) => s + Number(d[k]), 0);
+  return { matches: ds.length, won: out.filter(x => x === 'V').length, drawn: out.filter(x => x === 'E').length, lost: out.filter(x => x === 'D').length,
+    gf: sum('gf'), ga: sum('ga'), streak: streak, last: out[0] || '' };
 }
 
 function setResult(dayId) {
@@ -347,54 +587,59 @@ function setResult(dayId) {
 
 function eventDialog(dayId, kind) {
   const d = findDay(dayId);
-  const sq = players().filter(p => squad(d).includes(p['ID']));
-  const types = kind === 'goal' ? ['Gol'] : CARDS;
-  let type = types[0], pid = '', assist = '', fine = '';
-  const select = (id, list, sel, empty) => '<select id="' + id + '" class="full">' + (empty ? '<option value="">' + esc(empty) + '</option>' : '')
-    + list.map(x => '<option value="' + esc(x[0]) + '"' + (sel === x[0] ? ' selected' : '') + '>' + esc(x[1]) + '</option>').join('') + '</select>';
-  const draw = () => '<form method="dialog"><div class="title">' + (kind === 'goal' ? 'Gol' : 'Tarjeta') + '</div>'
-    + (types.length > 1 ? '<label for="evType">Tarjeta</label>' + select('evType', types.map(t => [t, t]), type) : '')
-    + '<label for="evPid">Jugador</label>' + pickPlayer('evPid', sq, pid, 'Elige jugador')
-    + (kind === 'goal' ? '<label for="evAssist">Asistencia (opcional)</label>' + pickPlayer('evAssist', sq.filter(p => p['ID'] !== pid), assist, 'Sin asistencia') : '')
-    + (kind === 'card' ? '<label for="evFine">¿Paga multa?</label>' + select('evFine', [['Sí', 'Sí: fue intencionada, la paga'], ['No', 'No: lance del juego']], fine, 'Elige') : '')
+  const sq = squadPlayers().filter(p => squad(d).includes(p['ID']));
+  const isCard = kind === 'card';
+  let type = isCard ? CARDS[0] : 'Gol', pid = '', assist = '', fine = '';
+  const names = list => list.map(p => [p['ID'], p['Nombre']]);
+  const draw = () => '<form method="dialog"><div class="title">' + (isCard ? 'Tarjeta' : 'Gol') + '</div>'
+    + (isCard ? '<label>Tarjeta</label>' + chipChoice('type', CARDS.map(c => [c, c]), type) : '')
+    + '<label>' + (isCard ? 'Jugador' : 'Quién marcó') + '</label>' + chipChoice('pid', names(sq), pid)
+    + (!isCard && pid ? '<label>Asistencia (opcional)</label>' + chipChoice('assist', names(sq.filter(p => p['ID'] !== pid)), assist) : '')
+    + (isCard ? '<label>¿Paga multa?</label>' + chipChoice('fine', [['Sí', 'Sí: fue intencionada, la paga'], ['No', 'No: lance del juego']], fine) : '')
     + '<label for="minute">Minuto (opcional)</label><input id="minute" inputmode="numeric" maxlength="3">'
-    + '<div class="row end"><button type="button" class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok" id="evOk"' + (pid && (kind !== 'card' || fine) ? '' : ' disabled') + '>Guardar</button></div></form>';
+    + '<div class="row end"><button type="button" class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok" id="evOk"' + (pid && (!isCard || fine) ? '' : ' disabled') + '>Guardar</button></div></form>';
   openDialog(draw(), dlg => {
-    dlg.onchange = e => {
-      const id = e.target.id;
-      if (['evPid', 'evAssist', 'evType', 'evFine'].indexOf(id) < 0) return;
-      if (id === 'evPid') { pid = e.target.value; if (assist === pid) assist = ''; }
-      else if (id === 'evAssist') assist = e.target.value;
-      else if (id === 'evType') type = e.target.value;
-      else fine = e.target.value;
+    dlg.onclick = e => {
+      const b = e.target.closest('[data-k]');
+      if (!b) return;
+      const v = b.dataset.val;
+      if (b.dataset.k === 'pid') { pid = v; if (assist === pid) assist = ''; }
+      // Tapping the chosen one again leaves the goal without assist.
+      else if (b.dataset.k === 'assist') assist = assist === v ? '' : v;
+      else if (b.dataset.k === 'type') type = v;
+      else fine = v;
       const minute = $('minute').value;
       dlg.innerHTML = draw();
       $('minute').value = minute;
     };
   }, () => {
     send({ t: 'Acta', op: 'u', v: { 'ID': uid(), 'Partido ID': dayId, 'Tipo': type, 'Jugador ID': pid, 'Minuto': $('minute').value.replace(/\D/g, '').slice(0, 3),
-      'Asistencia ID': assist !== pid ? assist : '', 'Multa': kind === 'card' ? fine : '', 'Temporada': d.season || activeSeason() } });
+      'Asistencia ID': assist !== pid ? assist : '', 'Multa': isCard ? fine : '', 'Temporada': d.season || activeSeason() } });
   });
+}
+/** Choose one by tapping its name: every option in sight, one tap instead of a drop-down. */
+function chipChoice(key, options, selected) {
+  return '<div class="chips">' + options.map(o => '<button type="button" class="btn' + (selected === o[0] ? ' on' : '') + '" data-k="' + key + '" data-val="' + esc(o[0]) + '">' + esc(o[1]) + '</button>').join('') + '</div>';
 }
 
 /** A goalkeeper in a part (or both), or a rival goal on the keeper who was in goal then. */
 function keeperDialog(dayId, kind) {
   const d = findDay(dayId);
-  const sq = players().filter(p => squad(d).includes(p['ID'])).sort((a, b) => isKeeper(b) - isKeeper(a));
+  const sq = squadPlayers().filter(p => squad(d).includes(p['ID'])).sort((a, b) => isKeeper(b) - isKeeper(a));
   const inGoal = part => (rows('Acta').find(x => x['Partido ID'] === dayId && x['Tipo'] === 'Portero' && String(x['Parte']) === part) || {})['Jugador ID'] || '';
   const parts = kind === 'keeper' ? [['1', '1ª parte'], ['2', '2ª parte'], ['12', 'Las dos partes']] : [['1', '1ª parte'], ['2', '2ª parte']];
   let part = '1', pid = kind === 'against' ? inGoal('1') : '';
-  const select = (id, list, sel) => '<select id="' + id + '" class="full">' + list.map(x => '<option value="' + esc(x[0]) + '"' + (sel === x[0] ? ' selected' : '') + '>' + esc(x[1]) + '</option>').join('') + '</select>';
   const draw = () => '<form method="dialog"><div class="title">' + (kind === 'keeper' ? 'Portero' : 'Gol en contra') + '</div>'
-    + '<label for="kpPart">Parte</label>' + select('kpPart', parts, part)
-    + '<label for="kpPid">Portero</label>' + pickPlayer('kpPid', sq, pid, 'Elige portero')
+    + (kind === 'keeper' ? '<label>Portero</label>' + chipChoice('pid', sq.map(p => [p['ID'], p['Nombre']]), pid) + '<label>Parte</label>' + chipChoice('part', parts, part)
+      : '<label>Parte</label>' + chipChoice('part', parts, part) + '<label>Portero</label>' + chipChoice('pid', sq.map(p => [p['ID'], p['Nombre']]), pid))
     + (kind === 'keeper' ? '<p class="small">Si se cambia por lesión, añade también al que entró.</p>' : '<label for="minute">Minuto (opcional)</label><input id="minute" inputmode="numeric" maxlength="3">')
     + '<div class="row end"><button type="button" class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok"' + (pid ? '' : ' disabled') + '>Guardar</button></div></form>';
   openDialog(draw(), dlg => {
-    dlg.onchange = e => {
-      if (e.target.id === 'kpPart') { part = e.target.value; if (kind === 'against' && inGoal(part)) pid = inGoal(part); }
-      else if (e.target.id === 'kpPid') pid = e.target.value;
-      else return;
+    dlg.onclick = e => {
+      const b = e.target.closest('[data-k]');
+      if (!b) return;
+      if (b.dataset.k === 'part') { part = b.dataset.val; if (kind === 'against' && inGoal(part)) pid = inGoal(part); }
+      else pid = b.dataset.val;
       const minute = $('minute') ? $('minute').value : '';
       dlg.innerHTML = draw();
       if ($('minute')) $('minute').value = minute;
@@ -451,7 +696,15 @@ function dayField(dayId, field, value) {
   const v = { 'ID': dayId };
   v[col] = field === 'time' || field === 'meet' ? normTime(value) : field === 'title' ? value.trim() : value;
   if (field === 'date' && !value) return;
+  // "n days before" follows the new date; a stamp set some other way stays as it is.
+  const choice = deadlineChoice(d);
+  if (field === 'date' && choice && choice !== 'raw') v['Responder antes'] = deadlineFor(value, Number(choice));
   send({ t: t, op: 'e', v: v });
+}
+function setDeadline(dayId, choice) {
+  const d = findDay(dayId);
+  if (!d || choice === 'raw') return;
+  send({ t: d.match ? 'Partidos' : 'Entrenamientos', op: 'e', v: { 'ID': dayId, 'Responder antes': choice ? deadlineFor(d.date, Number(choice)) : '' } });
 }
 
 /**
@@ -466,12 +719,12 @@ function setKind(dayId, label) {
   if (!d.match && kind[1]) {
     const marked = marksOf(dayId).map(m => m['Jugador ID']).filter(id => playerIds().includes(id));
     send([{ t: 'Entrenamientos', op: 'd', v: { 'ID': dayId } },
-      { t: 'Partidos', op: 'u', v: { 'ID': dayId, 'Fecha': d.date, 'Tipo': kind[1], 'Rival': d.title, 'Hora partido': normTime(d.time), 'Temporada': season } }]
+      { t: 'Partidos', op: 'u', v: { 'ID': dayId, 'Fecha': d.date, 'Tipo': kind[1], 'Rival': d.title, 'Hora partido': normTime(d.time), 'Responder antes': d.deadline, 'Temporada': season } }]
       .concat(marked.map(pid => ({ t: 'Convocatorias', op: 'u', v: { 'Partido ID': dayId, 'Jugador ID': pid, 'Temporada': season } }))));
     S.part = null;
   } else if (d.match && !kind[1]) {
     send([{ t: 'Partidos', op: 'd', v: { 'ID': dayId } },
-      { t: 'Entrenamientos', op: 'u', v: { 'ID': dayId, 'Fecha': d.date, 'Hora': normTime(d.time), 'Notas': d.title, 'Temporada': season } }]
+      { t: 'Entrenamientos', op: 'u', v: { 'ID': dayId, 'Fecha': d.date, 'Hora': normTime(d.time), 'Notas': d.title, 'Responder antes': d.deadline, 'Temporada': season } }]
       .concat(squad(d).map(pid => ({ t: 'Convocatorias', op: 'd', v: { 'Partido ID': dayId, 'Jugador ID': pid } }))));
     S.part = null;
   } else {
@@ -533,7 +786,7 @@ function viewFines() {
     h += '<div class="line"><label class="check"><input type="checkbox" data-chg="finePaid" data-id="' + esc(f.id) + '"' + (f.isPaid ? ' checked' : '') + (can.collect() ? '' : ' disabled') + '>'
       + '<span><span class="bold">' + esc(playerName(f.player)) + '</span><br><span class="small">' + esc([f.label, day ? dayTitle(day) : '', fdate(f.date)].filter(Boolean).join(' · ')) + '</span></span></label>'
       + '<span class="right"><span class="' + payClass(f.rest, f.paid) + '">' + (!f.isPaid && f.paid ? money(f.paid) + ' de ' + money(f.amount) : money(f.amount)) + '</span>'
-      + (can.fine() && !card ? '<button class="link danger-text" data-act="removeFine" data-id="' + esc(f.id) + '">Borrar</button>' : '') + '</span></div>';
+      + (can.fine() && !card ? '<button class="btn sm danger" data-act="removeFine" data-id="' + esc(f.id) + '">Borrar</button>' : '') + '</span></div>';
   });
   h += '</div>';
   if (list.length) h += '<p class="small">Marca la casilla cuando la multa esté pagada.</p>';
@@ -585,8 +838,8 @@ function newFineDialog() {
 function rulesDialog() {
   const draft = rules().map(r => ({ label: r.label, amount: String(r.cents / 100).replace('.', ',') }));
   const draw = () => '<form method="dialog"><div class="title">Tarifas del equipo</div>'
-    + draft.map((r, i) => '<div class="row nowrap"><input data-rl="' + i + '" value="' + esc(r.label) + '" maxlength="40"><input class="narrow" data-ra="' + i + '" value="' + esc(r.amount) + '" inputmode="decimal" placeholder="€"><button type="button" class="link danger-text" data-rx="' + i + '">Quitar</button></div>').join('')
-    + '<button type="button" class="link" data-radd="1">Añadir tarifa</button>'
+    + draft.map((r, i) => '<div class="row nowrap"><input data-rl="' + i + '" value="' + esc(r.label) + '" maxlength="40"><input class="narrow" data-ra="' + i + '" value="' + esc(r.amount) + '" inputmode="decimal" placeholder="€"><button type="button" class="btn sm danger" data-rx="' + i + '">Quitar</button></div>').join('')
+    + '<button type="button" class="btn sm" data-radd="1">Añadir tarifa</button>'
     + '<div class="row end"><button type="button" class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok">Guardar</button></div></form>';
   const read = dlg => dlg.querySelectorAll('[data-rl]').forEach(inp => { const i = Number(inp.dataset.rl); draft[i].label = inp.value; draft[i].amount = dlg.querySelector('[data-ra="' + i + '"]').value; });
   openDialog(draw(), dlg => {
@@ -619,16 +872,18 @@ function stats(pid) {
 }
 
 function viewSquad() {
-  const list = players().map(p => ({ p: p, s: stats(p['ID']) })).sort((a, b) => b.s.goals - a.s.goals || b.s.assists - a.s.assists);
+  // Coaches after the players, with no player numbers.
+  const list = squadPlayers().map(p => ({ p: p, s: stats(p['ID']) })).sort((a, b) => b.s.goals - a.s.goals || b.s.assists - a.s.assists)
+    .concat(coaches().map(p => ({ p: p, s: null })));
   let h = seasonBar();
   list.forEach(({ p, s }) => {
     const pid = p['ID'];
     const open = S.open === pid;
     const seasonFines = fines(f => f.player === pid && inSeason(f.row)).sort((a, b) => String(b.date).localeCompare(a.date));
     const pendingFines = seasonFines.reduce((t, f) => t + f.rest, 0);
-    h += '<div class="card"><div class="tap" data-act="openPlayer" data-pid="' + esc(pid) + '"><div class="row nowrap"><span class="num">' + esc(p['Dorsal'] || '–') + '</span><div><div class="name">' + esc(p['Nombre']) + '</div>'
-      + '<div class="small">' + esc([p['Apodo'], p['Posición']].filter(Boolean).join(' · ')) + '</div></div></div>'
-      + '<div class="small">' + esc([countOf(s.goals, 'gol', 'goles'), countOf(s.assists, 'asistencia', 'asistencias'), countOf(s.yellows, 'amarilla', 'amarillas'), countOf(s.reds, 'roja', 'rojas'), 'MVP ' + s.mvps].join(' · ')) + '</div>'
+    h += '<div class="card"><div class="tap" data-act="openPlayer" data-pid="' + esc(pid) + '"><div class="row nowrap"><span class="num">' + esc(p['Dorsal'] || '–') + '</span><div class="grow"><div class="name">' + esc(p['Nombre']) + (s ? '' : ' <span class="small">🧢 Entrenador</span>') + '</div>'
+      + '<div class="small">' + esc([p['Apodo'], s ? p['Posición'] : ''].filter(Boolean).join(' · ')) + '</div></div><span class="arrow">' + (open ? '▴' : '▾') + '</span></div>'
+      + (s ? '<div class="small">' + esc([countOf(s.goals, 'gol', 'goles'), countOf(s.assists, 'asistencia', 'asistencias'), countOf(s.yellows, 'amarilla', 'amarillas'), countOf(s.reds, 'roja', 'rojas'), 'MVP ' + s.mvps].join(' · ')) + '</div>' : '')
       + (pendingFines ? '<div class="small owed bold">Multas pendientes: ' + money(pendingFines) + '</div>' : '') + '</div>';
     if (open) {
       const acc = can.accounts() ? account(pid) : null;
@@ -638,7 +893,7 @@ function viewSquad() {
         const before = acc.fines.filter(f => earlier(seasonOf(f.row)));
         if (before.length) h += '<div class="bold mt">Multas de temporadas anteriores</div>';
         before.forEach(f => { h += moneyLine(f.label + ' · ' + fdate(f.date) + ' (' + shortSeason(f.season) + ')', f.amount, f.rest, can.collect() ? payButton('fine', f.id, pid) : ''); });
-        h += '<div class="row between mt"><span class="bold">Cuotas, equipación y ropa</span>' + (can.collect() ? '<button class="link" data-act="addCharge" data-pid="' + esc(pid) + '">+ Cargo</button>' : '') + '</div>';
+        h += '<div class="row between mt"><span class="bold">Cuotas, equipación y ropa</span>' + (can.collect() ? '<button class="btn sm" data-act="addCharge" data-pid="' + esc(pid) + '">+ Cargo</button>' : '') + '</div>';
         if (!acc.charges.length) h += '<div class="small">Nada cargado esta temporada.</div>';
         acc.charges.forEach(c => {
           const what = [c.category, c.concept].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).join(' · ') + (earlier(seasonOf({ 'Temporada': c.season })) ? ' (' + shortSeason(c.season) + ')' : '');
@@ -656,7 +911,7 @@ function viewSquad() {
   return h + '<p class="small">Los números salen de las actas de los partidos. Toca un jugador para ver sus datos.</p>';
 }
 const moneyLine = (text, amt, rest, extra) => '<div class="line"><span class="' + payClass(rest, amt - rest) + '">' + esc(text) + '</span><span class="right"><span class="bold ' + payClass(rest, amt - rest) + '">' + paidText(amt, rest) + '</span>' + (extra || '') + '</span></div>';
-const payButton = (kind, id, pid) => '<button class="link" data-act="pay" data-kind="' + kind + '" data-id="' + esc(id) + '" data-pid="' + esc(pid) + '">Cobrar</button>';
+const payButton = (kind, id, pid) => '<button class="btn sm" data-act="pay" data-kind="' + kind + '" data-id="' + esc(id) + '" data-pid="' + esc(pid) + '">Cobrar</button>';
 
 /** A payment, whole or in part, of a fine or a charge; a fine can also be paid from his credit. */
 function payDialog(kind, id, pid) {
@@ -726,7 +981,7 @@ function chargeDialog(pids, onlyOne) {
 // ---------- summary ----------
 function viewSummary() {
   const ds = days();
-  const lines = players().map(p => {
+  const lines = squadPlayers().map(p => {
     const pid = p['ID'];
     const marks = ds.map(d => calledUp(d).includes(pid) ? markOf(d.id, pid) : null).filter(Boolean);
     const n = s => marks.filter(m => m['Estado'] === s).length;
@@ -766,7 +1021,7 @@ function viewAccounts() {
       const sign = m['Tipo'] === 'Ingreso' ? '+' : m['Tipo'] === 'Gasto' ? '−' : '⇄ ';
       const cls = m['Tipo'] === 'Ingreso' ? 'paid' : m['Tipo'] === 'Gasto' ? 'owed' : 'small';
       h += '<div class="line"><span><span>' + esc(m['Concepto'] || m['Categoría']) + '</span><br><span class="small">' + esc([m['Categoría'], m['Jugador ID'] ? playerName(m['Jugador ID']) : '', fdate(m['Fecha']), m['Registrado por']].filter(Boolean).join(' · ')) + '</span></span>'
-        + '<span class="right"><span class="bold ' + cls + '">' + sign + money(cents(m['Importe'])) + '</span>' + (editable() ? '<button class="link danger-text" data-act="removeMovement" data-id="' + esc(m['ID']) + '">Borrar</button>' : '') + '</span></div>';
+        + '<span class="right"><span class="bold ' + cls + '">' + sign + money(cents(m['Importe'])) + '</span>' + (editable() ? '<button class="btn sm danger" data-act="removeMovement" data-id="' + esc(m['ID']) + '">Borrar</button>' : '') + '</span></div>';
     });
     return h + '</div>';
   }
@@ -775,14 +1030,14 @@ function viewAccounts() {
   all.forEach(({ p, a }) => {
     const pid = p['ID'];
     h += '<div class="card"><div class="tap row between" data-act="openPlayer" data-pid="' + esc(pid) + '"><span class="name">' + esc(p['Nombre']) + '</span><span class="bold ' + (a.total ? 'owed' : 'paid') + '">'
-      + (a.total ? 'Debe ' + money(a.total) + (a.credit ? ' · a favor ' + money(a.credit) : '') : a.credit ? 'A favor ' + money(a.credit) : 'Al día') + '</span></div>';
+      + (a.total ? 'Debe ' + money(a.total) + (a.credit ? ' · a favor ' + money(a.credit) : '') : a.credit ? 'A favor ' + money(a.credit) : 'Al día') + ' <span class="arrow">' + (S.open === pid ? '▴' : '▾') + '</span></span></div>';
     if (S.open === pid) {
       a.charges.forEach(c => { h += moneyLine([c.category, c.concept].filter(Boolean).join(' · ') + (earlier(seasonOf({ 'Temporada': c.season })) ? ' (' + shortSeason(c.season) + ')' : ''), c.amount, c.rest, ''); });
       a.fines.forEach(f => { h += moneyLine('Multa: ' + f.label + ' (' + fdate(f.date) + ')', f.amount, f.rest, ''); });
       if (a.credit) h += '<div class="small paid bold">Saldo a favor: ' + money(a.credit) + '</div>';
       rows('Cargos').filter(c => c['Jugador ID'] === pid && inSeason(c)).forEach(c => {
         h += '<div class="line small"><span>' + esc('Cargo · ' + [c['Categoría'], c['Concepto']].filter(Boolean).join(' · ') + ' · ' + fdate(c['Fecha'])) + '</span><span class="right">' + money(cents(c['Importe']))
-          + (editable() ? '<button class="link danger-text" data-act="removeCharge" data-id="' + esc(c['ID']) + '">Quitar</button>' : '') + '</span></div>';
+          + (editable() ? '<button class="btn sm danger" data-act="removeCharge" data-id="' + esc(c['ID']) + '">Quitar</button>' : '') + '</span></div>';
       });
       h += '<div class="bold mt">Total pendiente: ' + money(a.total) + '</div>';
     }
@@ -868,7 +1123,7 @@ function seasonBar() {
   return '<div class="row between season"><span><label for="seasonPick" class="inline">Temporada</label> <select id="seasonPick" data-chg="season">'
     + all.map(n => '<option' + (n === viewed() ? ' selected' : '') + '>' + esc(n) + '</option>').join('') + '</select>'
     + (editable() ? '' : ' <span class="small notice">solo consulta</span>') + '</span>'
-    + (can.seasons() ? '<button class="link" data-act="seasons">Gestionar</button>' : '') + '</div>';
+    + (can.seasons() ? '<button class="btn sm" data-act="seasons">Gestionar</button>' : '') + '</div>';
 }
 
 function seasonsDialog() {
@@ -882,8 +1137,8 @@ function seasonsDialog() {
       const n = t['Nombre'];
       const canDel = list.length > 1 && n !== active && contents(n) === 0;
       return '<div class="line"><span>' + esc(n) + (n === active ? ' <span class="paid">· activa</span>' : '') + '<br><span class="small">' + esc(fdate(t['Desde']) + ' – ' + fdate(t['Hasta'])) + '</span></span><span class="right">'
-        + (n !== active ? '<button type="button" class="link" data-sact="activate" data-name="' + esc(n) + '">Activar</button>' : '')
-        + (canDel ? '<button type="button" class="link danger-text" data-sact="delete" data-name="' + esc(n) + '">Borrar</button>' : '') + '</span></div>';
+        + (n !== active ? '<button type="button" class="btn sm" data-sact="activate" data-name="' + esc(n) + '">Activar</button>' : '')
+        + (canDel ? '<button type="button" class="btn sm danger" data-sact="delete" data-name="' + esc(n) + '">Borrar</button>' : '') + '</span></div>';
     }).join('')
     + '<div class="title mt">Nueva temporada</div><label for="snName">Nombre</label><input id="snName" value="' + start + '/' + (start + 1) + '">'
     + '<div class="grid2"><div><label for="snFrom">Desde</label><input id="snFrom" type="date" value="' + start + '-07-01"></div><div><label for="snTo">Hasta</label><input id="snTo" type="date" value="' + (start + 1) + '-06-30"></div></div>'
@@ -911,7 +1166,7 @@ function seasonsDialog() {
 
 /** Who said "Asistiré", field players and goalkeepers apart, goalkeepers by name: "Asisten 4 jugadores y 1 portero (Chino)". */
 function goingLine(ids) {
-  const going = players().filter(p => ids.includes(p['ID']));
+  const going = squadPlayers().filter(p => ids.includes(p['ID']));
   if (!going.length) return '';
   const keepers = going.filter(isKeeper), field = going.length - keepers.length;
   const parts = [field ? (field === 1 ? '1 jugador' : field + ' jugadores') : '',

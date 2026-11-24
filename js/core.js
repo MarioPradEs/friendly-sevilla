@@ -174,15 +174,21 @@ function players() {
   return rows('Jugadores').filter(p => isTrue(p['Activo']))
     .sort((a, b) => (Number(a['Dorsal']) || 999) - (Number(b['Dorsal']) || 999) || String(a['Nombre']).localeCompare(b['Nombre']));
 }
-const playerIds = () => players().map(p => p['ID']);
+/** Coaches sit in Jugadores too ("Entrenador" in Posición), but they never play: no call-up, list, MVP or stats. */
+const isCoach = p => /entrenador/i.test((p && p['Posición']) || '');
+const squadPlayers = () => players().filter(p => !isCoach(p));
+const coaches = () => players().filter(isCoach);
+const playerIds = () => squadPlayers().map(p => p['ID']);
 const playerName = id => { const p = rows('Jugadores').find(r => r['ID'] === id); return p ? p['Nombre'] : 'Ya no está en el equipo'; };
 const isKeeper = p => /portero/i.test(p['Posición'] || '');
+/** "Antonio", "Antonio y Luis", "Antonio, Luis y Rafa". */
+const andList = names => (names.length < 2 ? names.join('') : names.slice(0, -1).join(', ') + ' y ' + names[names.length - 1]);
 
 // ---------- days ----------
 function dayOf(r, match) {
   if (!match) {
     return { id: r['ID'], date: r['Fecha'], match: false, label: 'Entrenamiento', type: '', session: 'Entrenamiento',
-      title: r['Notas'] || '', time: r['Hora'] || '', meet: '', season: r['Temporada'] || '', row: r };
+      title: r['Notas'] || '', time: r['Hora'] || '', meet: '', season: r['Temporada'] || '', deadline: r['Responder antes'] || '', row: r };
   }
   // Anything that is not a friendly or a tournament is a league match, also an empty Tipo typed by hand.
   const kind = KINDS.slice(1).find(k => k[1] === r['Tipo']) || KINDS[1];
@@ -192,7 +198,7 @@ function dayOf(r, match) {
     title: r['Rival'] || '', time: r['Hora partido'] || '', meet: r['Hora convocatoria'] || '', side: r['Local/Visitante'] || '',
     ground: r['Campo'] || '', address: r['Dirección'] || '', maps: r['URL Google Maps'] || '', kit: r['Equipación'] || '',
     confirmed: isTrue(r['Convocatoria confirmada']), gf: r['Goles a favor'] || '', ga: r['Goles en contra'] || '',
-    status: r['Estado'] || '', season: r['Temporada'] || '', row: r,
+    status: r['Estado'] || '', season: r['Temporada'] || '', deadline: r['Responder antes'] || '', row: r,
   };
 }
 function allDays() {
@@ -222,12 +228,44 @@ function warnedInTime(d, n) {
   return !!n && n['Tipo'] === 'Llego tarde' && (isTrue(n['A tiempo']) || (!n['Avisado'] && nowStamp() < dayStart(d)));
 }
 
-function noticeText(n, m, own) {
-  if (n['Tipo'] === 'Asistiré') return own ? 'Has avisado: asistirás' : 'Avisó: asistirá' + (n['Apuntado por'] ? ' · lo apuntó ' + n['Apuntado por'] : '');
-  if (own) {
-    if (n['Tipo'] === 'No puedo ir') return 'Has avisado: no puedes ir' + (n['Motivo'] ? ' (' + n['Motivo'] + ')' : '');
-    return 'Has avisado: llegas tarde' + (n['Hora llegada'] ? ', sobre las ' + n['Hora llegada'] : '') + (n['Motivo'] ? ' (' + n['Motivo'] + ')' : '');
-  }
+// ---------- deadline to answer ("Responder antes", 'yyyy-MM-dd HH:mm') ----------
+/** The stamp for "n days before at 20:00", from the day's date. */
+function deadlineFor(date, n) {
+  const d = new Date(date + 'T12:00:00');
+  if (isNaN(d)) return '';
+  d.setDate(d.getDate() - n);
+  return ymd(d) + ' 20:00';
+}
+/** Which choice of the form a stamp is: 1, 2 or 3 days before, '' for none, 'raw' for anything else (kept as it is). */
+function deadlineChoice(d) {
+  if (!d.deadline) return '';
+  const n = [1, 2, 3].find(k => deadlineFor(d.date, k) === d.deadline);
+  return n ? String(n) : 'raw';
+}
+/** "mié 25/11". */
+function shortDay(date) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(date || '').trim());
+  if (!m) return String(date || '');
+  const dt = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12);
+  return ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'][dt.getDay()] + ' ' + m[3] + '/' + m[2];
+}
+/** "jue 27/11 a las 20:00". */
+function deadlineText(stamp) {
+  const m = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})$/.exec(String(stamp || '').trim());
+  return m ? shortDay(m[1]) + ' a las ' + m[2] : String(stamp || '');
+}
+/** Answers are still taken after it: it only changes how the missing ones are shown. */
+const deadlinePassed = d => !!d.deadline && nowStamp() > d.deadline;
+
+/** What I said, in my own words: "Has dicho que llegas tarde, sobre las 20:15 · Tráfico". */
+function ownNoticeText(n) {
+  const what = n['Tipo'] === 'Asistiré' ? 'Has dicho que vas' : n['Tipo'] === 'No puedo ir' ? 'Has dicho que no vas'
+    : 'Has dicho que llegas tarde' + (n['Hora llegada'] ? ', sobre las ' + n['Hora llegada'] : '');
+  return what + (n['Motivo'] ? ' · ' + n['Motivo'] : '') + (n['Apuntado por'] ? ' · lo apuntó ' + n['Apuntado por'] : '');
+}
+
+function noticeText(n, m) {
+  if (n['Tipo'] === 'Asistiré') return 'Avisó: asistirá' + (n['Apuntado por'] ? ' · lo apuntó ' + n['Apuntado por'] : '');
   if (n['Tipo'] === 'Llego tarde' && m && m['Estado'] === 'OK') return 'Avisó que llegaba tarde y llegó a su hora 👏';
   const what = n['Tipo'] === 'No puedo ir' ? 'no puede' : 'llega tarde' + (n['Hora llegada'] ? ' (' + n['Hora llegada'] + ')' : '');
   const time = !n['Avisado'] ? '' : isTrue(n['A tiempo']) ? ' · a tiempo' : ' · avisó tarde';
@@ -272,13 +310,21 @@ function keeperMissing(d) {
   const ids = calledUp(d);
   return !players().some(p => ids.includes(p['ID']) && going.includes(p['ID']) && isKeeper(p));
 }
+/** Who comes, from the notices of those expected (the squad of a match, everyone at a training); coaches apart. */
+function whoCounts(d) {
+  const who = squadPlayers().filter(p => calledUp(d).includes(p['ID']));
+  const of = type => who.filter(p => { const n = noticeOf(d.id, p['ID']); return n && n['Tipo'] === type; });
+  const silentIds = silentPlayers(d).map(p => p['ID']);
+  return { who: who, going: of('Asistiré'), late: of('Llego tarde'), cant: of('No puedo ir'), silent: who.filter(p => silentIds.includes(p['ID'])) };
+}
 function reminderText(d) {
   const who = silentPlayers(d);
   const L = ['📣 *' + dayTitle(d) + '* · ' + fdate(d.date) + (d.time ? ' a las ' + d.time : ''), ''];
   if (!who.length) L.push('Ya ha avisado todo el mundo 👏');
   else {
-    L.push('Decid en la app si vais: *Asistiré*, *No puedo ir* o *Llego tarde*.', '', 'Faltan por avisar (' + who.length + '):');
+    L.push('Decid en la app si vais: *Voy*, *Tarde* o *No voy*.', '', 'Faltan por avisar (' + who.length + '):');
     who.forEach(p => L.push('• ' + p['Nombre']));
+    if (d.deadline) L.push('', 'Plazo: ' + deadlineText(d.deadline));
   }
   L.push('', '📲 https://marioprades.github.io/friendly-sevilla/');
   return L.join(String.fromCharCode(10));

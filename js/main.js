@@ -1,6 +1,7 @@
 'use strict';
 /** What each version brought, newest first, for the directiva. Add a line here with every change. */
 const CHANGELOG = [
+  ["0.26.0", "23/11/2026", ["Lista «Quién viene» en cada día", "Entrenador en la plantilla", "Quién dirigió y banquillo en el acta", "Estadísticas del entrenador", "Aviso si el entrenador no puede ir", "Notas privadas del entrenador", "Plazo para responder", "Voy / Tarde / No voy en una fila", "El próximo partido, una sola vez", "Días: primero lo que viene", "Convocar de un toque a los que van", "Confirmar y enviar la convocatoria a la vez", "«Quedamos a las» para la hora de quedar", "Votar el MVP más tarde", "Nuevo día con formulario corto", "Pasar lista en una fila por jugador", "Acta: goleador con un toque", "Plantilla única", "Barra inferior para directiva y entrenador", "Lista de pendientes en Inicio", "Se ve qué se puede pulsar"]],
   ["0.25.1", "23/11/2026", ["En la plantilla, primero jugador o portero y luego la posición"]],
   ["0.25.0", "23/11/2026", ["Porteros por parte en el acta", "Goles en contra por portero", "Estadísticas de portero en el portal", "Partes y partidos a cero de cada portero"]],
   ["0.24.0", "22/11/2026", ["Botón «Asistiré»", "Jugadores y porteros que van", "Recordatorio por WhatsApp", "Aviso «Ningún portero ha dicho que va»", "Aviso de multas sin pagar en el portal", "Pasar lista según avisos", "Asistencia y racha en el portal", "Estadísticas en el portal", "Cumpleaños", "Cómo llegar en entrenos y partidos", "Próximo partido destacado", "Votación del MVP (obligatoria tras el partido)", "Top 3 de votos para elegir el MVP", "Novedades y cambios"]],
@@ -135,11 +136,17 @@ const ACT = {
   tab: ds => { S.tab = ds.tab; S.day = null; S.open = null; render(); window.scrollTo(0, 0); },
   sub: ds => { S.sub = ds.sub; render(); },
   warn: ds => warnDialog(ds.day, ds.type, ds.pid),
-  unwarn: ds => { if (confirm('¿Quitar el aviso?')) send({ t: 'Avisos', op: 'd', v: { 'Día ID': ds.day, 'Jugador ID': ds.pid } }); },
+  // Tapping the chosen answer again takes it back: the line under the buttons says so.
+  unwarn: ds => send({ t: 'Avisos', op: 'd', v: { 'Día ID': ds.day, 'Jugador ID': ds.pid } }),
   ics: ds => calendar(ds.day),
   addDay: () => addDay(),
   seasonTrainings: () => seasonTrainingsDialog(),
   openDay: ds => { S.day = ds.day; S.part = null; render(); window.scrollTo(0, 0); },
+  // A task on Inicio opens its day, or the fines when it has none.
+  todo: ds => { S.tab = ds.day ? 'dias' : 'multas'; S.day = ds.day || null; S.part = null; S.open = null; render(); window.scrollTo(0, 0); },
+  togglePast: () => { S.showPast = !S.showPast; render(); },
+  dayHead: ds => { S.headOpen = S.headOpen === ds.day ? null : ds.day; render(); },
+  who: ds => whoDialog(ds.day),
   closeDay: () => { S.day = null; render(); },
   deleteDay: ds => deleteDay(ds.day),
   dayKind: ds => setKind(ds.day, ds.kind),
@@ -147,19 +154,20 @@ const ACT = {
   part: ds => { S.part = ds.part; render(); },
   kit: ds => { const d = findDay(ds.day); if (d) send({ t: 'Partidos', op: 'e', v: { 'ID': ds.day, 'Equipación': d.kit === ds.kit ? '' : ds.kit } }); },
   callUp: ds => toggleCallUp(ds.day, ds.pid),
+  callUpAnswered: ds => callUpAnswered(ds.day),
+  confirmSend: ds => confirmAndSend(ds.day),
   confirmSquad: ds => { const d = findDay(ds.day); if (d) send({ t: 'Partidos', op: 'e', v: { 'ID': ds.day, 'Convocatoria confirmada': d.confirmed ? 'false' : 'true' } }); },
   squadWhatsApp: ds => { const d = findDay(ds.day); if (d) shareText(squadText(d)); },
   remind: ds => { const d = findDay(ds.day); if (d) shareText(reminderText(d)); },
   mark: ds => mark(ds.day, ds.pid, ds.state),
+  markMenu: ds => markMenu(ds.day, ds.pid, !!ds.list),
   markRest: ds => markRest(ds.day),
   markNotices: ds => markNotices(ds.day),
   congratulate: ds => shareText(birthdayText(ds.pid)),
   vote: ds => vote(ds.day),
   kitIssue: ds => toggleKitIssue(ds.day, ds.pid),
   excuse: ds => toggleExcuse(ds.day, ds.pid),
-  reason: ds => toggleReason(ds.day, ds.pid, ds.reason),
   applyFines: ds => applyFines(ds.day),
-  noticeFor: ds => noticeForDialog(ds.day, ds.pid),
   addEvent: ds => eventDialog(ds.day, ds.kind),
   addKeeper: ds => keeperDialog(ds.day, ds.kind),
   removeEvent: ds => send({ t: 'Acta', op: 'd', v: { 'ID': ds.id } }),
@@ -200,7 +208,12 @@ const CHG = {
   dayTitle: el => dayField(el.dataset.day, 'title', el.value),
   dayTime: el => dayField(el.dataset.day, 'time', el.value),
   dayMeet: el => dayField(el.dataset.day, 'meet', el.value),
+  dayDeadline: el => { el.blur(); setDeadline(el.dataset.day, el.value); },
+  // Blurred first: a focused field holds the redraw back, and the warning above depends on these.
+  led: el => { el.blur(); toggleActa(el.dataset.day, 'Dirigió', el.dataset.pid); },
+  bench: el => { el.blur(); toggleActa(el.dataset.day, 'Banquillo', el.dataset.pid); },
   result: el => setResult(el.dataset.day),
+  absReason: el => { el.blur(); toggleReason(el.dataset.day, el.dataset.pid, el.value); },
   finePaid: el => toggleFinePaid(el.dataset.id, el.checked),
   season: el => { S.viewSeason = el.value === activeSeason() ? '' : el.value; S.day = null; S.open = null; render(); },
 };
@@ -216,6 +229,15 @@ document.addEventListener('change', e => {
   if (el.closest('dialog')) return;
   const f = el.dataset && CHG[el.dataset.chg];
   if (f) f(el);
+});
+// The coach's notes save themselves a moment after typing stops; the text is taken now, so a redraw cannot lose it.
+let noteTimer = null;
+document.addEventListener('input', e => {
+  const el = e.target;
+  if (el.id !== 'coachNote' || el.closest('dialog')) return;
+  const day = el.dataset.day, text = el.value;
+  clearTimeout(noteTimer);
+  noteTimer = setTimeout(() => saveCoachNote(day, text), 1200);
 });
 document.addEventListener('submit', e => {
   if (e.target.id !== 'profile') return;

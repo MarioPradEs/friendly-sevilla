@@ -85,7 +85,7 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 label.inline { display: inline; margin: 0; }
 label.check { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 16px; color: var(--text); }
 label.check input { width: 20px; height: 20px; flex-shrink: 0; }
-input, select { width: 100%; font: inherit; color: var(--text); background: var(--surface2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+input, select, textarea { width: 100%; font: inherit; color: var(--text); background: var(--surface2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
 select { width: auto; padding: 6px 10px; }
 input:disabled { opacity: .6; }
 input.narrow { width: 90px; flex-shrink: 0; }
@@ -118,6 +118,30 @@ dialog.fallback { display: block; position: fixed; top: 5vh; left: 50%; transfor
   .chips { gap: 5px; }
   main { padding: 10px 12px; }
 }
+/* Tappable vs data: filled = main action, outlined = secondary, › or ▾ = opens, ✏️ = a value to change. */
+.btn.sm { padding: 5px 12px; font-size: 14px; }
+a.btn { display: inline-block; text-decoration: none; }
+.grow { flex: 1; min-width: 0; }
+.row.tight { margin-top: 0; gap: 6px; }
+.arrow { color: var(--muted); font-size: 20px; line-height: 1; flex-shrink: 0; }
+.head { margin-top: 0; }
+.who { white-space: nowrap; font-size: 14px; padding: 8px 10px; }
+.answer { display: flex; gap: 6px; margin-top: 10px; }
+.answer .btn { flex: 1; padding: 9px 4px; white-space: nowrap; }
+.field { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; text-align: left; background: var(--surface2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 15px; }
+.field .pen { flex-shrink: 0; color: var(--muted); }
+.fold { display: block; background: none; border: 0; padding: 0; margin: 14px 0 8px; font-size: 18px; font-weight: 600; color: var(--text); }
+.fold:disabled { opacity: 1; }
+.todo { background: var(--surface2); padding-bottom: 6px; }
+.todo-line { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; text-align: left; background: none; border: 0; border-top: 1px solid var(--line); padding: 10px 0; margin-top: 6px; }
+.box { width: 40px; height: 40px; flex-shrink: 0; border-radius: 8px; border: 1px solid var(--line); background: transparent; padding: 0; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.box.ok.on { background: #2e7d32; border-color: #2e7d32; color: #fff; }
+.box.late.on { background: #ef6c00; border-color: #ef6c00; color: #fff; }
+.box.miss.on { background: var(--red); border-color: var(--red); color: #111; }
+.box.more { border-color: transparent; font-size: 20px; }
+.player .row.nowrap { gap: 4px; }
+.menu { display: flex; flex-direction: column; margin-top: 8px; }
+.menu-item { background: none; border: 0; border-top: 1px solid var(--line); text-align: left; padding: 12px 4px; }
 .hidden { display: none !important; }
 </style>
 </head>
@@ -151,9 +175,9 @@ dialog.fallback { display: block; position: fixed; top: 5vh; left: 50%; transfor
 <dialog id="dlg"></dialog>
 
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="js/core.js?v=35"></script>
-<script src="js/portal.js?v=35"></script>
-<script src="js/club.js?v=35"></script>
-<script src="js/main.js?v=35"></script>
+<script src="js/core.js?v=37"></script>
+<script src="js/portal.js?v=37"></script>
+<script src="js/club.js?v=37"></script>
+<script src="js/main.js?v=37"></script>
 </body>
 </html>
