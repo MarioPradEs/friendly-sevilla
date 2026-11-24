@@ -87,6 +87,8 @@ const can = {
   collect: () => ROLE() === 'Directiva' && editable(),
   accounts: () => ROLE() === 'Directiva',
   seasons: () => ROLE() === 'Directiva',
+  // Results between the other teams; ours come from the report.
+  league: () => ROLE() === 'Directiva' && editable(),
   club: () => ['Directiva', 'Entrenador'].includes(ROLE()),
 };
 

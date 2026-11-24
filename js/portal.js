@@ -519,3 +519,130 @@ function vote(dayId) {
   send({ t: 'Votos MVP', op: 'u', v: { 'Partido ID': dayId, 'Jugador ID': me, 'Votado ID': voted, 'Temporada': (d && d.season) || activeSeason() } });
   toast('Voto guardado');
 }
+
+// ---------- league table ("Clasificación") ----------
+// Same rules as the app's LeaguePlan: our league matches count once the report has the score;
+// the directiva types in the matches between the other teams.
+/** Our club's key when Equipos has no row for it. */
+const CLUB_KEY = 'club';
+const clubId = () => { const c = clubTeam(); return c ? c.id : CLUB_KEY; };
+const isWhole = v => /^-?\d+$/.test(String(v == null ? '' : v).trim());
+function leagueTeamName(id) {
+  if (id === clubId()) return TEAM;
+  const r = rivals().find(t => t.id === id);
+  return r ? r.name : '?';
+}
+/** The typed-in results of the viewed season, without the rows missing a team or a score. */
+function leagueResults() {
+  return rows('Resultados liga').filter(r => inSeason(r)).map(r => ({
+    id: r['ID'], date: r['Fecha'] || '', homeId: String(r['Local ID'] || '').trim(), awayId: String(r['Visitante ID'] || '').trim(),
+    homeGoals: r['Goles local'], awayGoals: r['Goles visitante'], season: r['Temporada'] || '',
+  })).filter(r => r.homeId && r.awayId && isWhole(r.homeGoals) && isWhole(r.awayGoals))
+    .map(r => Object.assign(r, { homeGoals: Number(String(r.homeGoals).trim()), awayGoals: Number(String(r.awayGoals).trim()) }));
+}
+/** Every league match with a score, newest first; resultId is null for ours (they come from the report). */
+function leagueGames() {
+  const own = clubId();
+  const ours = days().filter(d => d.match && d.session === 'Partido' && isWhole(d.gf) && isWhole(d.ga) && d.title.trim()).map(d => {
+    const rival = d.title.trim();
+    const found = rivals().find(t => t.name.toLowerCase() === rival.toLowerCase());
+    const rid = found ? found.id : 'name:' + rival;
+    const us = Number(String(d.gf).trim()), them = Number(String(d.ga).trim());
+    return d.side === 'Visitante'
+      ? { date: d.date, homeId: rid, home: rival, awayId: own, away: TEAM, homeGoals: them, awayGoals: us, resultId: null }
+      : { date: d.date, homeId: own, home: TEAM, awayId: rid, away: rival, homeGoals: us, awayGoals: them, resultId: null };
+  });
+  const others = leagueResults().map(r => ({ date: r.date, homeId: r.homeId, home: leagueTeamName(r.homeId), awayId: r.awayId, away: leagueTeamName(r.awayId),
+    homeGoals: r.homeGoals, awayGoals: r.awayGoals, resultId: r.id }));
+  return ours.concat(others).sort((a, b) => b.date.localeCompare(a.date));
+}
+/** Everyone who has played, best first: points (3 a win, 1 a draw), goal difference, goals scored, then name. */
+function leagueTable() {
+  const own = clubId();
+  const table = {};
+  const add = (id, name, scored, conceded) => {
+    const r = table[id] || (table[id] = { teamId: id, name: name, played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, own: id === own });
+    r.played++; r.goalsFor += scored; r.goalsAgainst += conceded;
+    if (scored > conceded) r.won++; else if (scored === conceded) r.drawn++; else r.lost++;
+  };
+  leagueGames().forEach(g => { add(g.homeId, g.home, g.homeGoals, g.awayGoals); add(g.awayId, g.away, g.awayGoals, g.homeGoals); });
+  const low = s => s.toLowerCase();
+  return Object.keys(table).map(k => Object.assign(table[k], { goalDiff: table[k].goalsFor - table[k].goalsAgainst, points: table[k].won * 3 + table[k].drawn }))
+    .sort((a, b) => b.points - a.points || b.goalDiff - a.goalDiff || b.goalsFor - a.goalsFor || (low(a.name) < low(b.name) ? -1 : low(a.name) > low(b.name) ? 1 : 0));
+}
+
+/** "Inicio" for the player: the home and the league table, one tap apart. */
+function viewInicio() {
+  S.homeTab = S.homeTab || 'inicio';
+  return '<div class="chips">' + [['inicio', 'Inicio'], ['liga', 'Clasificación']].map(x => '<button class="btn' + (S.homeTab === x[0] ? ' on' : '') + '" data-act="homeTab" data-sub="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>'
+    + (S.homeTab === 'liga' ? viewLeague() : viewHome());
+}
+
+/** The table and the results it comes from. Ours are never typed twice: they come from the report. */
+function viewLeague() {
+  const table = leagueTable();
+  const games = leagueGames();
+  const edit = can.league();
+  let h = can.club() ? seasonBar() : '';
+  if (edit) h += '<div class="row"><button class="btn primary wide" data-act="addResult"' + (rivals().length >= 2 ? '' : ' disabled') + '>+ Resultado</button></div>';
+  if (!table.length) return h + '<p class="small">Aún no hay resultados de liga. Los nuestros salen del acta; los de los demás equipos los mete la directiva.</p>';
+  const heads = ['PJ', 'G', 'E', 'P', 'GF', 'GC', 'DG', 'Pts'];
+  h += '<div class="card standings"><table><thead><tr><th>#</th><th class="team">Equipo</th>' + heads.map(x => '<th>' + x + '</th>').join('') + '</tr></thead><tbody>'
+    + table.map((r, i) => '<tr' + (r.own ? ' class="own"' : '') + '><td>' + (i + 1) + '</td><td class="team">' + esc(r.name) + '</td>'
+      + [r.played, r.won, r.drawn, r.lost, r.goalsFor, r.goalsAgainst, r.goalDiff > 0 ? '+' + r.goalDiff : r.goalDiff].map(c => '<td>' + c + '</td>').join('')
+      + '<td class="bold">' + r.points + '</td></tr>').join('') + '</tbody></table></div>';
+  h += '<h2>Últimos resultados</h2><div class="card">';
+  const own = clubId();
+  games.forEach(g => {
+    const score = '<span' + (g.homeId === own || g.awayId === own ? ' class="bold"' : '') + '>' + esc(g.home + ' ' + g.homeGoals + ' – ' + g.awayGoals + ' ' + g.away) + '</span>';
+    const body = '<span class="grow"><span class="small">' + esc(fdate(g.date)) + '</span><br>' + score + '</span>';
+    // Only typed-in results can be corrected, and only by the directiva in the active season.
+    h += edit && g.resultId
+      ? '<div class="line tap edit" data-act="editResult" data-id="' + esc(g.resultId) + '">' + body + '<span class="pen" aria-label="Corregir">✏️</span></div>'
+      : '<div class="line">' + body + '</div>';
+  });
+  return h + '</div>';
+}
+
+/** Typing in or correcting a result between two other teams. Nothing is saved until "Guardar". */
+function resultDialog(id) {
+  if (!can.league()) return;
+  const old = id ? leagueResults().find(r => r.id === id) : null;
+  if (id && !old) return;
+  const teams = rivals().slice().sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+  let date = old ? old.date : today(), home = old ? old.homeId : '', away = old ? old.awayId : '';
+  const goals = { home: old ? old.homeGoals : 0, away: old ? old.awayGoals : 0 };
+  const read = () => { date = $('lrDate').value || date; home = $('lrHome').value; away = $('lrAway').value; if (away === home) away = ''; };
+  const pick = (sid, list, sel) => '<select id="' + sid + '" class="full"><option value="">Elige equipo</option>'
+    + list.map(t => '<option value="' + esc(t.id) + '"' + (t.id === sel ? ' selected' : '') + '>' + esc(t.name) + '</option>').join('') + '</select>';
+  const stepper = side => '<div class="row"><span class="small">Goles</span><button type="button" class="btn sm" data-goal="' + side + '" data-step="-1"' + (goals[side] > 0 ? '' : ' disabled') + '>−</button>'
+    + '<span class="title">' + goals[side] + '</span><button type="button" class="btn sm" data-goal="' + side + '" data-step="1">+</button></div>';
+  const draw = () => '<form method="dialog"><div class="title">' + (old ? 'Corregir resultado' : 'Nuevo resultado') + '</div>'
+    + '<label for="lrDate">Fecha</label><input id="lrDate" type="date" value="' + esc(date) + '">'
+    + '<label for="lrHome">Local</label>' + pick('lrHome', teams, home) + stepper('home')
+    + '<label for="lrAway">Visitante</label>' + pick('lrAway', teams.filter(t => t.id !== home), away) + stepper('away')
+    + '<div class="row end">' + (old ? '<button type="button" class="btn danger" data-goal="delete">Borrar</button>' : '')
+    + '<button type="button" class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok"' + (home && away && home !== away ? '' : ' disabled') + '>Guardar</button></div></form>';
+  openDialog(draw(), dlg => {
+    dlg.onclick = e => {
+      const b = e.target.closest('[data-goal]');
+      if (!b) return;
+      read();
+      if (b.dataset.goal === 'delete') {
+        closeDialog();
+        confirmDialog('¿Seguro?', 'Se borra el resultado ' + leagueTeamName(old.homeId) + ' ' + old.homeGoals + ' – ' + old.awayGoals + ' ' + leagueTeamName(old.awayId) + '. No se puede deshacer.', 'Borrar',
+          () => send({ t: 'Resultados liga', op: 'd', v: { 'ID': old.id } }));
+        return;
+      }
+      goals[b.dataset.goal] = Math.max(0, goals[b.dataset.goal] + Number(b.dataset.step));
+      dlg.innerHTML = draw();
+    };
+    // Picking a team redraws: the away list leaves out the home team, and Guardar needs both.
+    dlg.onchange = e => { if (!e.target || e.target.tagName !== 'SELECT') return; read(); dlg.innerHTML = draw(); };
+  }, () => {
+    read();
+    if (!home || !away || home === away) { toast('Elige dos equipos distintos'); return false; }
+    send({ t: 'Resultados liga', op: 'u', v: { 'ID': old ? old.id : uid(), 'Fecha': date, 'Local ID': home, 'Visitante ID': away,
+      'Goles local': String(goals.home), 'Goles visitante': String(goals.away), 'Temporada': (old && old.season) || activeSeason() } });
+  });
+}

@@ -1,6 +1,7 @@
 'use strict';
 /** What each version brought, newest first, for the directiva. Add a line here with every change. */
 const CHANGELOG = [
+  ["0.27.0", "24/11/2026", ["Nueva pestaña Clasificación en Inicio: la tabla de la liga con nuestros partidos del acta y los resultados de los demás equipos, que mete la directiva."]],
   ["0.26.0", "23/11/2026", ["Lista «Quién viene» en cada día", "Entrenador en la plantilla", "Quién dirigió y banquillo en el acta", "Estadísticas del entrenador", "Aviso si el entrenador no puede ir", "Notas privadas del entrenador", "Plazo para responder", "Voy / Tarde / No voy en una fila", "El próximo partido, una sola vez", "Días: primero lo que viene", "Convocar de un toque a los que van", "Confirmar y enviar la convocatoria a la vez", "«Quedamos a las» para la hora de quedar", "Votar el MVP más tarde", "Nuevo día con formulario corto", "Pasar lista en una fila por jugador", "Acta: goleador con un toque", "Plantilla única", "Barra inferior para directiva y entrenador", "Lista de pendientes en Inicio", "Se ve qué se puede pulsar"]],
   ["0.25.1", "23/11/2026", ["En la plantilla, primero jugador o portero y luego la posición"]],
   ["0.25.0", "23/11/2026", ["Porteros por parte en el acta", "Goles en contra por portero", "Estadísticas de portero en el portal", "Partes y partidos a cero de cada portero"]],
@@ -24,7 +25,7 @@ const CHANGELOG = [
   ["0.15.0", "21/11/2026", ["Conexión con la hoja de la directiva", "Portal del jugador", "Pestaña Cuentas", "Convocatoria de 18"]]];
 // Navigation by role, sign-in, dialogs and the wiring of every button to its action.
 
-const PORTAL = { inicio: viewHome, pagos: viewMoney, perfil: viewProfile };
+const PORTAL = { inicio: viewHome, liga: viewLeague, pagos: viewMoney, perfil: viewProfile };
 
 function tabsFor() {
   const r = ROLE();
@@ -65,10 +66,11 @@ function render() {
     h = d ? viewDay(d) : viewDays();
   } else if (S.tab === 'yo') {
     S.sub = S.sub || 'inicio';
-    h = '<div class="chips">' + [['inicio', 'Inicio'], ['pagos', ROLE() === 'Entrenador' ? 'Mis multas' : 'Mis pagos'], ['perfil', 'Mi perfil']].map(x => '<button class="btn' + (S.sub === x[0] ? ' on' : '') + '" data-act="sub" data-sub="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>'
+    // The staff's home lives here, so the league table sits next to it.
+    h = '<div class="chips">' + [['inicio', 'Inicio'], ['liga', 'Clasificación'], ['pagos', ROLE() === 'Entrenador' ? 'Mis multas' : 'Mis pagos'], ['perfil', 'Mi perfil']].map(x => '<button class="btn' + (S.sub === x[0] ? ' on' : '') + '" data-act="sub" data-sub="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>'
       + androidLink() + PORTAL[S.sub]();
   } else {
-    h = ({ inicio: viewHome, pagos: viewMoney, perfil: viewProfile, multas: viewFines, plantilla: viewSquad, resumen: viewSummary, cuentas: viewAccounts }[S.tab] || viewHome)();
+    h = ({ inicio: viewInicio, pagos: viewMoney, perfil: viewProfile, multas: viewFines, plantilla: viewSquad, resumen: viewSummary, cuentas: viewAccounts }[S.tab] || viewHome)();
   }
   const y = window.scrollY;
   $('view').innerHTML = h;
@@ -108,7 +110,7 @@ function closeDialog() {
 function openDialog(html, setup, onOk) {
   const dlg = $('dlg');
   dlg.innerHTML = html;
-  dlg.onclick = null;
+  dlg.onclick = null; dlg.onchange = null;
   if (setup) setup(dlg);
   dlg.onsubmit = e => {
     e.preventDefault();
@@ -135,6 +137,9 @@ function confirmDialog(title, text, ok, action) {
 const ACT = {
   tab: ds => { S.tab = ds.tab; S.day = null; S.open = null; render(); window.scrollTo(0, 0); },
   sub: ds => { S.sub = ds.sub; render(); },
+  homeTab: ds => { S.homeTab = ds.sub; render(); window.scrollTo(0, 0); },
+  addResult: () => resultDialog(''),
+  editResult: ds => resultDialog(ds.id),
   warn: ds => warnDialog(ds.day, ds.type, ds.pid),
   // Tapping the chosen answer again takes it back: the line under the buttons says so.
   unwarn: ds => send({ t: 'Avisos', op: 'd', v: { 'Día ID': ds.day, 'Jugador ID': ds.pid } }),

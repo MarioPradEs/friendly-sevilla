@@ -142,6 +142,16 @@ a.btn { display: inline-block; text-decoration: none; }
 .player .row.nowrap { gap: 4px; }
 .menu { display: flex; flex-direction: column; margin-top: 8px; }
 .menu-item { background: none; border: 0; border-top: 1px solid var(--line); text-align: left; padding: 12px 4px; }
+/* League table: plain data, our row stands out; a typed-in result the directiva can correct shows ✏️. */
+.standings { padding: 8px 6px; overflow-x: auto; }
+.standings table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.standings th, .standings td { padding: 6px 4px; text-align: right; white-space: nowrap; }
+.standings th { color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--line); }
+.standings .team { text-align: left; width: 100%; max-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.standings tr.own td { background: rgba(217,199,156,.16); color: var(--gold); font-weight: 700; }
+.line.edit { cursor: pointer; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin: 6px 0; }
+.line.edit:last-child { border-bottom: 1px solid var(--line); }
+.line .pen { flex-shrink: 0; color: var(--muted); }
 .hidden { display: none !important; }
 </style>
 </head>
@@ -175,9 +185,9 @@ a.btn { display: inline-block; text-decoration: none; }
 <dialog id="dlg"></dialog>
 
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="js/core.js?v=37"></script>
-<script src="js/portal.js?v=37"></script>
-<script src="js/club.js?v=37"></script>
-<script src="js/main.js?v=37"></script>
+<script src="js/core.js?v=38"></script>
+<script src="js/portal.js?v=38"></script>
+<script src="js/club.js?v=38"></script>
+<script src="js/main.js?v=38"></script>
 </body>
 </html>
