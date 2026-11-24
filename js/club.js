@@ -23,6 +23,8 @@ function viewDays() {
     if (pastOpen) h += past.map(dayRow).join('');
   }
   if (can.editDays()) h += '<button class="btn wide mt" data-act="seasonTrainings">Crear entrenamientos de la temporada</button>';
+  // The official league calendar needs the rivals from Equipos.
+  if (can.editDays() && rivals().length) h += '<button class="btn wide mt" data-act="leagueCalendar">Crear calendario de liga</button>';
   return h;
 }
 /** One day in the list: what happened or who said what; the arrow says it opens. */
@@ -47,7 +49,7 @@ function dayRow(d) {
     notCalledUp(d).length ? countOf(notCalledUp(d).length, 'no convocado', 'no convocados') : '',
   ].filter(Boolean).join(' · ');
   return '<div class="card tap" data-act="openDay" data-day="' + esc(d.id) + '"><div class="row between nowrap head"><span class="title">' + esc(dayTitle(d)) + '</span><span class="arrow">›</span></div><div class="small">'
-    + esc(fdate(d.date) + (d.time ? ' · ' + d.time : '')) + '</div>' + (result ? '<div class="small bold">' + esc(result) + '</div>' : '')
+    + esc(fdate(d.date) + (d.time ? ' · ' + d.time : '')) + '</div>' + (d.off ? '<div class="small bold warn">' + esc(offLabel(d)) + '</div>' : '') + (result ? '<div class="small bold">' + esc(result) + '</div>' : '')
     + (info ? '<div class="small">' + esc(info) + '</div>' : '') + (keeperMissing(d) ? '<div class="small bold warn">Ningún portero ha dicho que va</div>' : '') + '</div>';
 }
 function verdict(d) {
@@ -98,7 +100,7 @@ function viewDay(d) {
     // Like a player, plus the list: the day as it is, nothing of it to change.
     return '<button class="link" data-act="closeDay">‹ Volver</button><div class="card"><div class="title">' + esc(dayTitle(d)) + '</div><div class="small">'
       + esc([fdate(d.date), d.time ? 'a las ' + d.time : '', d.side].filter(Boolean).join(' · ')) + '</div>'
-      + (coming ? '<div class="row">' + whoButton(d) + '</div>' : '') + '</div>' + partList(d);
+      + (coming && !d.off ? '<div class="row">' + whoButton(d) + '</div>' : '') + '</div>' + offPart(d, false) + partList(d);
   }
   const parts = d.match ? ['Convocatoria', 'Pasar lista', 'Acta'] : ['Pasar lista'];
   // Opens where the work is: no squad yet, the call-up; a match already played, its report; else the list.
@@ -111,8 +113,14 @@ function viewDay(d) {
   const open = edit && S.headOpen === d.id;
   h += edit ? '<button class="field mt" data-act="dayHead" data-day="' + esc(d.id) + '"><span>' + esc(head) + '</span><span class="pen">' + (open ? '▴' : '✏️') + '</span></button>'
     : '<div class="small mt">' + esc(head) + '</div>';
+  h += offPart(d, edit);
+  if (S.announce && S.announce.day === d.id) {
+    h += '<div class="row nowrap"><button class="btn grow" data-act="announce" data-day="' + esc(d.id) + '">📣 Avisar del cambio por WhatsApp</button>'
+      + '<button class="icon-btn" data-act="noAnnounce" aria-label="No avisar">✕</button></div>';
+  }
   if (open) {
     h += '<div class="card mt">';
+    if (!d.off) h += '<button class="btn wide" data-act="dayOff" data-day="' + esc(d.id) + '">' + (d.match ? '⏸️ Aplazar partido' : '❌ Suspender entreno') + '</button>';
     h += '<label for="dayDate">Fecha</label><input id="dayDate" type="date" value="' + esc(d.date) + '" data-chg="dayDate" data-day="' + esc(d.id) + '">';
     h += '<label>Tipo de día</label><div class="chips">' + KINDS.map(k => '<button class="btn' + (d.label === k[0] ? ' on' : '') + '" data-act="dayKind" data-kind="' + esc(k[0]) + '" data-day="' + esc(d.id) + '">' + esc(k[0]) + '</button>').join('') + '</div>';
     h += '<label for="dayTitle">' + (d.match ? 'Rival' : 'Nombre (opcional)') + '</label><input id="dayTitle" value="' + esc(d.title) + '" maxlength="80" data-chg="dayTitle" data-day="' + esc(d.id) + '"' + (d.match ? ' list="rivalList"' : '') + '>';
@@ -133,8 +141,8 @@ function viewDay(d) {
     h += '</div>';
   }
   if (keeperMissing(d)) h += '<div class="small bold warn mt">Ningún portero ha dicho que va</div>';
-  // Who comes only matters before the day; the reminder too, by WhatsApp to those who have not said.
-  if (coming) {
+  // Who comes only matters before the day; the reminder too, by WhatsApp to those who have not said. Not on a day that is off.
+  if (coming && !d.off) {
     const silent = silentPlayers(d).length;
     h += '<div class="row nowrap">' + whoButton(d)
       + (edit && d.gf === '' ? '<button class="btn" data-act="remind" data-day="' + esc(d.id) + '">Recordar' + (silent ? ' (' + silent + ')' : '') + '</button>' : '') + '</div>';
@@ -145,6 +153,101 @@ function viewDay(d) {
   else h += partList(d);
   return h;
 }
+/**
+ * Postponed or cancelled: why, a new date for a match, taking it back, and the message for the group.
+ * Whoever cannot change the day still sees why and can pass it on.
+ */
+function offPart(d, edit) {
+  if (!d.off) return '';
+  const postponed = d.off === POSTPONED;
+  return '<div class="card mt off-card"><div class="bold warn">' + esc(offLabel(d)) + '</div><div class="row">'
+    + (edit && postponed ? '<button class="btn primary" data-act="newDate" data-day="' + esc(d.id) + '">Poner nueva fecha</button>' : '')
+    + (edit ? '<button class="btn" data-act="dayOn" data-day="' + esc(d.id) + '">' + (postponed ? 'Quitar aplazamiento' : 'Quitar suspensión') + '</button>' : '')
+    + '<button class="btn" data-act="offWhatsApp" data-day="' + esc(d.id) + '">📣 Avisar por WhatsApp</button></div></div>';
+}
+/** Why a day is off: one tap on the reason, then "Aplazar" or "Suspender". */
+function offDialog(dayId) {
+  const d = findDay(dayId);
+  if (!d || d.off || !can.editDays()) return;
+  let reason = '';
+  const draw = () => '<form method="dialog"><div class="title">' + (d.match ? 'Aplazar partido' : 'Suspender entreno') + '</div>'
+    + '<p class="small">' + (d.match ? 'Queda aplazado hasta que pongas la nueva fecha. No cuenta para asistencia, multas ni MVP.' : 'No se hace: no cuenta para asistencia ni multas.') + '</p>'
+    + '<label>Motivo</label>' + chipChoice('reason', OFF_REASONS.map(r => [r, r]), reason)
+    + '<div class="row end"><button type="button" class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok"' + (reason ? '' : ' disabled') + '>' + (d.match ? 'Aplazar' : 'Suspender') + '</button></div></form>';
+  openDialog(draw(), dlg => {
+    dlg.onclick = e => {
+      const b = e.target.closest('[data-k]');
+      if (!b) return;
+      reason = b.dataset.val;
+      dlg.innerHTML = draw();
+    };
+  }, () => {
+    if (!reason) return false;
+    send({ t: d.match ? 'Partidos' : 'Entrenamientos', op: 'e', v: { 'ID': dayId, 'Estado': d.match ? POSTPONED : CANCELLED, 'Motivo': reason } });
+    S.headOpen = null;
+    render();
+  });
+}
+/** On again: a match keeps the state it had (played or not), a training has none. */
+function dayOn(dayId) {
+  const d = findDay(dayId);
+  if (!d || !d.off || !can.editDays()) return;
+  send({ t: d.match ? 'Partidos' : 'Entrenamientos', op: 'e', v: { 'ID': dayId, 'Estado': d.match && d.gf !== '' && d.ga !== '' ? 'Jugado' : '', 'Motivo': '' } });
+}
+/** "Poner nueva fecha": the date alone, then the same steps as changing it in the day's settings. */
+function newDateDialog(dayId) {
+  const d = findDay(dayId);
+  if (!d || !can.editDays()) return;
+  openDialog('<form method="dialog"><div class="title">Nueva fecha</div><div class="small">' + esc(dayTitle(d)) + '</div>'
+    + '<label for="ndNew">Fecha</label><input id="ndNew" type="date" value="' + esc(d.date) + '">'
+    + '<div class="row end"><button type="button" class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok">Guardar</button></div></form>', null, () => {
+    const date = $('ndNew').value;
+    if (!date) { toast('Elige la fecha'); return false; }
+    if (date === d.date) return;
+    // The question about the answers may come next, in this same dialog.
+    closeDialog();
+    changeDate(dayId, date);
+    return false;
+  });
+}
+/**
+ * A new date for any day. If someone already said whether they come, ask whether their answers go
+ * (only the directiva may clear other people's answers in the sheet). A day that was off is on again.
+ * Afterwards the group can be told.
+ */
+function changeDate(dayId, date) {
+  const d = findDay(dayId);
+  if (!d || !date || date === d.date) return;
+  const n = rows('Avisos').filter(a => a['Día ID'] === dayId).length;
+  if (n > 0 && can.clearAnswers()) {
+    // The date field goes back to the stored date until the answer: "Cancelar" changes nothing.
+    render();
+    openDialog('<form method="dialog"><div class="title">Nueva fecha: ' + esc(shortDay(date)) + '</div>'
+      + '<p>' + (n === 1 ? '1 persona ya había' : n + ' personas ya habían') + ' dicho si iba. ¿Borro las respuestas para que vuelvan a contestar con la nueva fecha?</p>'
+      + '<div class="row end"><button type="button" class="btn" data-keep="1">Mantenerlas</button><button class="btn primary" value="ok">Borrar respuestas</button></div></form>', dlg => {
+      dlg.onclick = e => {
+        if (!e.target.closest('[data-keep]')) return;
+        closeDialog();
+        reschedule(dayId, date, false);
+      };
+    }, () => { reschedule(dayId, date, true); });
+    return;
+  }
+  reschedule(dayId, date, false);
+}
+function reschedule(dayId, date, clearAnswers) {
+  const d = findDay(dayId);
+  if (!d) return;
+  const v = { 'ID': dayId, 'Fecha': date };
+  // "n days before" follows the new date; a stamp set some other way stays as it is.
+  const choice = deadlineChoice(d);
+  if (choice && choice !== 'raw') v['Responder antes'] = deadlineFor(date, Number(choice));
+  if (d.off) { v['Estado'] = d.match && d.gf !== '' && d.ga !== '' ? 'Jugado' : ''; v['Motivo'] = ''; }
+  S.announce = { day: dayId, text: movedMessage(Object.assign({}, d, { date: date }), clearAnswers) };
+  send([{ t: d.match ? 'Partidos' : 'Entrenamientos', op: 'e', v: v }]
+    .concat(clearAnswers ? rows('Avisos').filter(a => a['Día ID'] === dayId).map(a => ({ t: 'Avisos', op: 'd', v: { 'Día ID': dayId, 'Jugador ID': a['Jugador ID'] } })) : []));
+}
+
 /** "Quién viene ✅3 ⏰1 ❌1 ❔4": opens the names. */
 function whoButton(d) {
   const w = whoCounts(d);
@@ -582,7 +685,8 @@ function setResult(dayId) {
   const gf = $('gf').value.replace(/\D/g, '').slice(0, 2), ga = $('ga').value.replace(/\D/g, '').slice(0, 2);
   const d = findDay(dayId);
   const played = gf !== '' || ga !== '';
-  send({ t: 'Partidos', op: 'e', v: { 'ID': dayId, 'Goles a favor': gf, 'Goles en contra': ga, 'Estado': played ? 'Jugado' : (d && d.status !== 'Jugado' ? d.status : '') } });
+  // A postponed match stays postponed until its new date.
+  send({ t: 'Partidos', op: 'e', v: { 'ID': dayId, 'Goles a favor': gf, 'Goles en contra': ga, 'Estado': d && d.off ? d.off : played ? 'Jugado' : (d && d.status !== 'Jugado' ? d.status : '') } });
 }
 
 function eventDialog(dayId, kind) {
@@ -770,6 +874,95 @@ function seasonTrainingsDialog() {
     send(ops);
     toast(countOf(ops.length, 'entrenamiento creado', 'entrenamientos creados'));
   });
+}
+
+/**
+ * The official league calendar in one go: the first round as the league sends it (date, rival, home
+ * or away) and, if wanted, the return round with the sides swapped. Times are left out: the committee
+ * sets them in the match week. Nothing is created until "Crear".
+ */
+function leagueCalendarDialog() {
+  const names = rivals().map(r => r.name);
+  if (!can.editDays() || !names.length) return;
+  // The first round as a starting point: every rival once, a week apart from today, alternating home and away.
+  let first = names.map((rival, i) => ({ date: addDays(today(), 7 * i), rival: rival, home: i % 2 === 0 }));
+  let withReturn = true;
+  let returnStart = addDays(first.map(f => f.date).sort().pop(), 7);
+  let returnDates = {};
+  const back = () => first.map((f, i) => ({ date: returnDates[i] || addDays(returnStart, 7 * i), rival: f.rival, home: !f.home }));
+  const all = () => first.concat(withReturn ? back() : []);
+  // A date button: what it says plus ✏️, with the date input laid over it so a tap opens the picker.
+  const dateBtn = (key, date) => '<span class="btn sm datebtn">' + esc(shortDay(date)) + ' ✏️<input type="date" data-fd="' + key + '" value="' + esc(date) + '" aria-label="Fecha"></span>';
+  const draw = () => {
+    const n = all().length;
+    return '<form method="dialog"><div class="title">Calendario de liga</div>'
+      + '<p class="small">Pon cada jornada como la manda la liga: fecha, rival y si jugáis en casa o fuera. La hora se pone luego, cuando la decida el comité.</p>'
+      + '<div class="bold">Ida</div>'
+      + first.map((f, i) => '<div class="fixture"><div class="row tight"><span class="num">J' + (i + 1) + '</span>' + dateBtn('f' + i, f.date)
+        + '<button type="button" class="btn sm' + (f.home ? ' on' : '') + '" data-fside="' + i + '">' + (f.home ? 'Casa' : 'Fuera') + '</button></div>'
+        + '<select class="full" data-frival="' + i + '" aria-label="Rival">' + names.map(r => '<option' + (r === f.rival ? ' selected' : '') + '>' + esc(r) + '</option>').join('') + '</select></div>').join('')
+      + '<label class="check mt"><input type="checkbox" data-fret="1"' + (withReturn ? ' checked' : '') + '><span>Crear también la vuelta (casa y fuera cambiados)</span></label>'
+      + (withReturn ? '<label for="lcReturn">Primera jornada de la vuelta</label><input id="lcReturn" type="date" data-fstart="1" value="' + esc(returnStart) + '">'
+        + '<div class="bold mt">Vuelta</div>'
+        + back().map((f, i) => '<div class="fixture"><div class="row tight"><span class="num">J' + (first.length + i + 1) + '</span>' + dateBtn('r' + i, f.date)
+          + '<span class="small">' + (f.home ? 'Casa' : 'Fuera') + '</span></div><div class="small">' + esc(f.rival) + '</div></div>').join('') : '')
+      + '<div class="row end"><button type="button" class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok"' + (n ? '' : ' disabled') + '>Crear ' + n + ' partidos</button></div></form>';
+  };
+  const redraw = dlg => { const y = dlg.scrollTop; dlg.innerHTML = draw(); dlg.scrollTop = y; };
+  openDialog(draw(), dlg => {
+    dlg.onclick = e => {
+      const pick = e.target.closest('input[data-fd]');
+      // Desktop browsers open the picker only from their own icon: ask for it on any tap.
+      if (pick) { try { pick.showPicker(); } catch (x) { /* not supported: the input takes the tap itself */ } return; }
+      const b = e.target.closest('[data-fside]');
+      if (!b) return;
+      const i = Number(b.dataset.fside);
+      first = first.map((f, j) => (j === i ? Object.assign({}, f, { home: !f.home }) : f));
+      redraw(dlg);
+    };
+    dlg.onchange = e => {
+      const t = e.target, ds = (t && t.dataset) || {};
+      if (ds.fd && t.value) {
+        const i = Number(ds.fd.slice(1));
+        if (ds.fd[0] === 'f') first = first.map((f, j) => (j === i ? Object.assign({}, f, { date: t.value }) : f));
+        else returnDates = Object.assign({}, returnDates, { [i]: t.value });
+      } else if (ds.frival) {
+        first = pickRival(first, Number(ds.frival), t.value);
+      } else if (ds.fret) {
+        withReturn = !!t.checked;
+      } else if (ds.fstart && t.value) {
+        returnStart = t.value; returnDates = {};
+      } else return;
+      redraw(dlg);
+    };
+  }, () => {
+    const made = createFixtures(all());
+    toast(countOf(made, 'partido creado', 'partidos creados'));
+  });
+}
+/** Choosing a rival already in another row swaps the two, so each rival plays once a round. */
+function pickRival(round, index, rival) {
+  const other = round.findIndex(f => f.rival === rival);
+  const old = round[index].rival;
+  return round.map((f, i) => (i === index ? Object.assign({}, f, { rival: rival }) : i === other ? Object.assign({}, f, { rival: old }) : f));
+}
+/**
+ * One league match per fixture, with its rival and side and no time yet. A league match against the
+ * same rival on the same date that is already there is left as it is, so creating twice adds nothing.
+ * Like any new match day, nobody is called up yet.
+ */
+function createFixtures(fixtures) {
+  const taken = new Set(allDays().filter(d => d.match && d.session === 'Partido').map(d => d.date + '|' + d.title.trim().toLowerCase()));
+  const ops = [];
+  fixtures.forEach(f => {
+    const key = f.date + '|' + f.rival.trim().toLowerCase();
+    if (!f.rival.trim() || taken.has(key)) return;
+    taken.add(key);
+    ops.push({ t: 'Partidos', op: 'u', v: { 'ID': uid(), 'Fecha': f.date, 'Tipo': 'Liga', 'Rival': f.rival.trim(), 'Local/Visitante': f.home ? 'Local' : 'Visitante',
+      'Hora partido': '', 'Temporada': activeSeason() } });
+  });
+  send(ops);
+  return ops.length;
 }
 
 // ---------- fines ----------
@@ -1172,4 +1365,119 @@ function goingLine(ids) {
   const parts = [field ? (field === 1 ? '1 jugador' : field + ' jugadores') : '',
     keepers.length ? (keepers.length === 1 ? '1 portero' : keepers.length + ' porteros') + ' (' + keepers.map(p => p['Nombre']).join(', ') + ')' : ''].filter(Boolean);
   return (going.length === 1 ? 'Asiste ' : 'Asisten ') + parts.join(' y ');
+}
+
+// ---------- search (directiva and coach) ----------
+// Same rules as the app's SearchPlan: type "multa", "acta", "entreno" or a name and go straight there.
+/** Lower case without accents: "Árbitro" finds "arbitro". */
+const searchNorm = text => String(text || '').toLowerCase().normalize('NFD').replace(/\p{M}+/gu, '');
+
+/**
+ * Everything the search can find for whoever is searching: title, hint, where it goes and other words
+ * it answers to. "go" is a tab (and a sub-tab), a day, a player, and something to start there.
+ */
+function searchShortcuts() {
+  const directiva = ROLE() === 'Directiva', plays = !!(S.yo && S.yo.jugadorId), finesToo = can.fine();
+  const out = [];
+  const add = (title, hint, go, words) => out.push({ title: title, hint: hint, go: go, words: words || '' });
+  // The staff's league table lives in Yo.
+  const league = { tab: 'yo', sub: 'liga' };
+  add('Añadir día', 'Entreno, partido, amistoso o torneo', { tab: 'dias', action: 'newDay' }, 'nuevo crear dia entreno entrenamiento partido evento');
+  add('Calendario de liga', 'Crear la ida y la vuelta', { tab: 'dias', action: 'calendar' }, 'jornadas ida vuelta temporada partidos liga');
+  add('Entrenos de la temporada', 'Crear todos los entrenamientos', { tab: 'dias', action: 'season' }, 'entrenamientos temporada crear');
+  add('Clasificación', 'La tabla de la liga', league, 'tabla liga puntos');
+  if (directiva) add('Meter resultado de otro equipo', 'Para la clasificación', league, 'resultado liga clasificacion otros equipos');
+  if (finesToo) {
+    add('Poner multa', 'Multas', { tab: 'multas', action: 'newFine' }, 'multa sancion nueva');
+    add('Cobrar multas', 'Multas', { tab: 'multas' }, 'multas pagos pendientes deudas cobrar');
+  }
+  if (directiva) {
+    add('Apuntar gasto o ingreso', 'Cuentas', { tab: 'cuentas', action: 'newMovement' }, 'movimiento gasto ingreso cuentas dinero contabilidad cuota');
+    add('Resumen del dinero', 'Cuentas', { tab: 'cuentas' }, 'resumen dinero caja saldo');
+  }
+  add('Plantilla', 'Jugadores y estadísticas', { tab: 'plantilla' }, 'jugadores equipo estadisticas goles');
+  if (plays) {
+    add('Pendientes', 'Lo que queda por hacer', { tab: 'yo', sub: 'inicio' }, 'tareas pendiente inicio');
+    add('Mi perfil', 'Yo', { tab: 'yo', sub: 'perfil' }, 'perfil datos tallas telefono');
+    add('Mis pagos', 'Yo', { tab: 'yo', sub: 'pagos' }, 'mis multas pagos');
+  }
+  // Recent and coming days: their report, list or call-up.
+  const iso = today(), from = addDays(iso, -45), to = addDays(iso, 90);
+  allDays().filter(d => d.date >= from && d.date <= to).sort((a, b) => a.date.localeCompare(b.date)).forEach(d => {
+    const when = (d.date === iso ? 'hoy ' : '') + shortDay(d.date);
+    const x = d.match && d.date < iso ? ['Acta · ' + dayTitle(d) + ' · ' + when, 'Resultado, goles y tarjetas', 'acta resultado goles tarjetas partido lista']
+      : d.match ? [dayTitle(d) + ' · ' + when, 'Convocatoria, quién viene, aplazar', 'convocatoria convocar partido aplazar quien viene recordar hora']
+        : [dayTitle(d) + ' · ' + when, d.date <= iso ? 'Pasar lista' : 'Quién viene, suspender', 'entreno entrenamiento lista asistencia suspender'];
+    add(x[0], x[1], { tab: 'dias', day: d.id }, x[2] + (d.date === iso ? ' hoy' : ''));
+  });
+  // People: their card in Plantilla (the web has no player editor) and their fines.
+  players().forEach(p => {
+    const extra = [p['Apodo'], p['Dorsal']].filter(x => String(x || '').trim()).join(' ');
+    add('Ficha de ' + p['Nombre'], 'Plantilla', { tab: 'plantilla', pid: p['ID'] }, 'jugador ficha ' + extra);
+    if (finesToo) add('Multas de ' + p['Nombre'], 'Multas', { tab: 'multas', pid: p['ID'] }, 'multas pagos deuda ' + extra);
+  });
+  return out;
+}
+
+/**
+ * Every word typed must be found (a plural also finds the singular). Nothing typed: the actions, not
+ * every day and person. Actions before days and people, and titles that start like the first word first.
+ */
+function searchFind(query, all) {
+  const tokens = searchNorm(query).split(/\s+/).filter(Boolean);
+  if (!tokens.length) return all.filter(s => !s.go.day && !s.go.pid);
+  const has = (text, t) => text.indexOf(t) >= 0 || (t.length > 3 && /s$/.test(t) && text.indexOf(t.slice(0, -1)) >= 0)
+    || (t.length > 4 && /es$/.test(t) && text.indexOf(t.slice(0, -2)) >= 0);
+  const rank = s => {
+    const title = searchNorm(s.title);
+    const entity = s.go.day || s.go.pid ? 10 : 0;
+    return entity + (title.indexOf(tokens[0]) === 0 ? 0 : title.split(' ').some(w => w.indexOf(tokens[0]) === 0) ? 1 : 2);
+  };
+  return all.filter(s => { const text = searchNorm(s.title + ' ' + s.hint + ' ' + s.words); return tokens.every(t => has(text, t)); })
+    .map((s, i) => ({ s: s, r: rank(s), i: i })).sort((a, b) => a.r - b.r || a.i - b.i).map(x => x.s).slice(0, 20);
+}
+
+/** The full-screen search: type and tap where to go. Nothing typed shows every action. */
+function searchDialog() {
+  if (!can.search()) return;
+  const all = searchShortcuts();
+  let found = searchFind('', all);
+  const list = q => (found.length ? found.map((s, i) => '<button type="button" class="todo-line" data-go="' + i + '"><span><span>' + esc(s.title) + '</span><br><span class="small">' + esc(s.hint) + '</span></span><span class="arrow">›</span></button>').join('')
+    : '<p class="small">Nada con «' + esc(q) + '». Prueba con otra palabra: multa, acta, lista, calendario…</p>');
+  openDialog('<form method="dialog"><div class="row nowrap head"><button type="button" class="icon-btn" value="cancel" aria-label="Cerrar">✕</button>'
+    + '<input id="searchQ" type="search" autocomplete="off" placeholder="Multa, acta, entreno, un jugador…" aria-label="Buscar">'
+    + '<button class="hidden" value="ok" tabindex="-1">Ir</button></div><div id="searchList" class="menu">' + list('') + '</div></form>', dlg => {
+    dlg.classList.add('search');
+    dlg.oninput = e => {
+      if (!e.target || e.target.id !== 'searchQ') return;
+      found = searchFind(e.target.value, all);
+      $('searchList').innerHTML = list(e.target.value);
+    };
+    dlg.onclick = e => {
+      const b = e.target.closest('[data-go]');
+      if (!b) return;
+      closeDialog();
+      goTo(found[Number(b.dataset.go)].go);
+    };
+  }, () => {
+    // Enter goes to the first result.
+    if (!found.length) return false;
+    closeDialog();
+    goTo(found[0].go);
+    return false;
+  });
+  setTimeout(() => { const q = $('searchQ'); if (q && q.focus) q.focus(); }, 0);
+}
+
+/** Goes where a search result says, and opens the form where the app does. */
+function goTo(go) {
+  S.tab = go.tab; S.day = go.day || null; S.part = null; S.open = go.pid || null; S.headOpen = null;
+  if (go.sub) S.sub = go.sub;
+  if (go.tab === 'cuentas') S.accView = 'Movimientos';
+  render(); window.scrollTo(0, 0);
+  if (go.action === 'newDay' && can.editDays()) addDay();
+  else if (go.action === 'calendar' && can.editDays() && rivals().length) leagueCalendarDialog();
+  else if (go.action === 'season' && can.editDays()) seasonTrainingsDialog();
+  else if (go.action === 'newFine' && can.fine()) newFineDialog();
+  else if (go.action === 'newMovement' && editable()) movementDialog();
 }

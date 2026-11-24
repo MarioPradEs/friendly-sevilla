@@ -15,9 +15,10 @@ function viewHome() {
   h += todoCard(todoList());
   const meRow = me ? rows('Jugadores').find(r => r['ID'] === me) : null;
   const meCoach = isCoach(meRow);
-  const nextMatch = upcoming.find(d => d.match && d.gf === '');
+  // A postponed match is not the next one: it waits for its new date.
+  const nextMatch = upcoming.find(d => d.match && !d.off && d.gf === '');
   // The first day still without my answer, if it is not the match: right at the top, so nobody forgets.
-  const toAnswer = me ? upcoming.find(d => d !== nextMatch && !noticeOf(d.id, me) && canAnswer(d, me, meCoach)) : null;
+  const toAnswer = me ? upcoming.find(d => d !== nextMatch && !d.off && !noticeOf(d.id, me) && canAnswer(d, me, meCoach)) : null;
   if (toAnswer) h += '<h2>Te falta responder</h2>' + dayCard(toAnswer, me, meCoach, false);
   // The next match, big, with the answer right there; it is not repeated below.
   if (nextMatch) h += dayCard(nextMatch, me, meCoach, true);
@@ -60,7 +61,8 @@ function dayCard(d, me, meCoach, hero) {
   // The squad is only shown once the coach or the directiva confirm it.
   const confirmed = d.match && d.confirmed && sq.length > 0;
   const n = me ? noticeOf(d.id, me) : null;
-  const answers = canAnswer(d, me, meCoach);
+  // Postponed or cancelled: why, instead of the answer buttons.
+  const answers = !d.off && canAnswer(d, me, meCoach);
   let h = '<div class="card' + (hero ? ' match-card' : '') + '">';
   if (hero) h += nextMatchHead(d);
   else {
@@ -85,6 +87,7 @@ function dayCard(d, me, meCoach, hero) {
     const names = squadPlayers().filter(p => sq.includes(p['ID'])).map(p => (p['Dorsal'] ? '#' + p['Dorsal'] + ' ' : '') + p['Nombre']);
     h += '<div class="small">Convocados (' + names.length + '): ' + esc(names.join(', ')) + '</div>';
   }
+  if (d.off) h += '<div class="bold warn mt">' + esc(offLabel(d)) + '</div>';
   if (answers) {
     // One row, the main answer first; the chosen one is filled, and tapping it again takes it back.
     h += '<div class="answer">' + ANSWERS.map(a => {
@@ -125,13 +128,14 @@ function todoList() {
       });
   }
   if (can.callUp()) {
-    ds.filter(d => d.match && d.date >= iso && d.date <= week && !d.confirmed).forEach(d => {
+    ds.filter(d => d.off === POSTPONED).forEach(d => out.push({ text: 'Partido aplazado sin nueva fecha: ' + dayTitle(d), day: d.id }));
+    ds.filter(d => d.match && !d.off && d.date >= iso && d.date <= week && !d.confirmed).forEach(d => {
       const w = whoCounts(d);
       out.push({ text: 'Convocatoria sin confirmar: ' + dayTitle(d) + ' del ' + shortDay(d.date) + ' · ✅' + w.going.length + ' ❔' + w.silent.length, day: d.id });
     });
   }
   if (can.report()) {
-    ds.filter(d => d.match && d.date >= lastWeeks && d.date < iso && calledUp(d).length).filter(d => {
+    ds.filter(d => d.match && !d.off && d.date >= lastWeeks && d.date < iso && calledUp(d).length).filter(d => {
       const ev = rows('Acta').filter(x => x['Partido ID'] === d.id);
       const againstMissing = (parseInt(d.ga, 10) || 0) > ev.filter(x => x['Tipo'] === 'Gol en contra').length;
       return d.gf === '' || d.ga === '' || againstMissing || ev.filter(x => x['Tipo'] === 'Gol').length < (parseInt(d.gf, 10) || 0);
@@ -439,7 +443,8 @@ function voteWindow(d) {
   return [opens, new Date(opens.getTime() + 24 * 3600000)];
 }
 function voteOpen(d) {
-  const w = d.match && voteWindow(d);
+  // A postponed match has no MVP until it is played.
+  const w = d.match && !d.off && voteWindow(d);
   const now = new Date();
   return !!w && now >= w[0] && now <= w[1];
 }
@@ -559,7 +564,7 @@ function leagueGames() {
 /** Our league matches already played (before today) with no score yet: they do not count until the report has it. */
 function leagueMissing() {
   const t = today();
-  return days().filter(d => d.match && d.session === 'Partido' && d.date < t && d.title.trim() && !(isWhole(d.gf) && isWhole(d.ga)))
+  return days().filter(d => d.match && !d.off && d.session === 'Partido' && d.date < t && d.title.trim() && !(isWhole(d.gf) && isWhole(d.ga)))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 /** Everyone who has played, best first: points (3 a win, 1 a draw), goal difference, goals scored, then name. */

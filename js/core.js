@@ -90,6 +90,9 @@ const can = {
   // Results between the other teams; ours come from the report.
   league: () => ROLE() === 'Directiva' && editable(),
   club: () => ['Directiva', 'Entrenador'].includes(ROLE()),
+  // Other people's answers ("Avisos"): the sheet lets the coach touch only his own.
+  clearAnswers: () => ROLE() === 'Directiva' && editable(),
+  search: () => ['Directiva', 'Entrenador'].includes(ROLE()),
 };
 
 // ---------- API ----------
@@ -187,10 +190,16 @@ const isKeeper = p => /portero/i.test(p['Posición'] || '');
 const andList = names => (names.length < 2 ? names.join('') : names.slice(0, -1).join(', ') + ' y ' + names[names.length - 1]);
 
 // ---------- days ----------
+/** A match can only be postponed (it waits for a new date); a training can be cancelled (it is not held). */
+const POSTPONED = 'Aplazado', CANCELLED = 'Suspendido';
+const OFF_REASONS = ['Lluvia', 'Campo no disponible', 'Rival', 'Árbitro', 'Otro'];
+/** "Aplazado" or "Suspendido" from the sheet's Estado; anything else means the day is on. */
+const offOf = r => { const s = String(r['Estado'] || '').trim(); return s === POSTPONED || s === CANCELLED ? s : ''; };
 function dayOf(r, match) {
   if (!match) {
     return { id: r['ID'], date: r['Fecha'], match: false, label: 'Entrenamiento', type: '', session: 'Entrenamiento',
-      title: r['Notas'] || '', time: r['Hora'] || '', meet: '', season: r['Temporada'] || '', deadline: r['Responder antes'] || '', row: r };
+      title: r['Notas'] || '', time: r['Hora'] || '', meet: '', season: r['Temporada'] || '', deadline: r['Responder antes'] || '',
+      off: offOf(r), offReason: offOf(r) ? r['Motivo'] || '' : '', row: r };
   }
   // Anything that is not a friendly or a tournament is a league match, also an empty Tipo typed by hand.
   const kind = KINDS.slice(1).find(k => k[1] === r['Tipo']) || KINDS[1];
@@ -200,7 +209,9 @@ function dayOf(r, match) {
     title: r['Rival'] || '', time: r['Hora partido'] || '', meet: r['Hora convocatoria'] || '', side: r['Local/Visitante'] || '',
     ground: r['Campo'] || '', address: r['Dirección'] || '', maps: r['URL Google Maps'] || '', kit: r['Equipación'] || '',
     confirmed: isTrue(r['Convocatoria confirmada']), gf: r['Goles a favor'] || '', ga: r['Goles en contra'] || '',
-    status: r['Estado'] || '', season: r['Temporada'] || '', deadline: r['Responder antes'] || '', row: r,
+    // "Aplazado" lives in off, so taking it back leaves the match as it was.
+    status: offOf(r) ? '' : r['Estado'] || '', season: r['Temporada'] || '', deadline: r['Responder antes'] || '',
+    off: offOf(r), offReason: offOf(r) ? r['Motivo'] || '' : '', row: r,
   };
 }
 function allDays() {
@@ -216,7 +227,8 @@ function calledUp(d) { const ids = playerIds(); if (!d.match) return ids; const 
 const notCalledUp = d => (d.match ? playerIds().filter(id => !squad(d).includes(id)) : []);
 const marksOf = dayId => rows('Asistencia').filter(a => a['Día ID'] === dayId);
 const markOf = (dayId, pid) => rows('Asistencia').find(a => a['Día ID'] === dayId && a['Jugador ID'] === pid);
-const unmarked = d => calledUp(d).filter(id => !markOf(d.id, id));
+/** Those still to be marked; a day that is off has nobody to mark. */
+const unmarked = d => (d.off ? [] : calledUp(d).filter(id => !markOf(d.id, id)));
 const noticeOf = (dayId, pid) => rows('Avisos').find(a => a['Día ID'] === dayId && a['Jugador ID'] === pid);
 const came = m => m && (m['Estado'] === 'OK' || m['Estado'] === 'Tarde');
 
@@ -256,6 +268,33 @@ function deadlineText(stamp) {
   const m = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})$/.exec(String(stamp || '').trim());
   return m ? shortDay(m[1]) + ' a las ' + m[2] : String(stamp || '');
 }
+/** "⏸️ Aplazado · Lluvia · nueva fecha por confirmar" or "❌ Suspendido · Lluvia". */
+function offLabel(d) {
+  if (d.off === POSTPONED) return ['⏸️ Aplazado', d.offReason, 'nueva fecha por confirmar'].filter(Boolean).join(' · ');
+  if (d.off === CANCELLED) return ['❌ Suspendido', d.offReason].filter(Boolean).join(' · ');
+  return '';
+}
+/** For the team's WhatsApp group, once the day is off. */
+function offMessage(d) {
+  const reason = d.offReason ? ' (' + d.offReason + ')' : '';
+  const NL = String.fromCharCode(10);
+  return d.off === POSTPONED
+    ? '⏸️ *Partido aplazado*' + NL + dayTitle(d) + ' del ' + shortDay(d.date) + reason + '.' + NL + 'Os avisamos en cuanto haya nueva fecha.'
+    : '❌ *Entreno suspendido*' + NL + 'El del ' + shortDay(d.date) + reason + ' no se hace.';
+}
+/** For the team's WhatsApp group, once a day has moved. */
+function movedMessage(d, cleared) {
+  const NL = String.fromCharCode(10);
+  return '📅 *Cambio de fecha*' + NL + dayTitle(d) + ': ahora es el ' + shortDay(d.date) + (d.time ? ' a las ' + d.time : '') + '.'
+    + (cleared ? NL + 'Volved a decir en la app si vais.' : '');
+}
+/** "2026-11-24" moved n days. */
+function addDays(date, n) {
+  const d = new Date(date + 'T12:00:00');
+  d.setDate(d.getDate() + n);
+  return ymd(d);
+}
+
 /** Answers are still taken after it: it only changes how the missing ones are shown. */
 const deadlinePassed = d => !!d.deadline && nowStamp() > d.deadline;
 
@@ -307,7 +346,7 @@ function silentPlayers(d) {
 /** A day still to come for which no goalkeeper has said "Asistiré". */
 function keeperMissing(d) {
   // Already played (result in) or already marked: nothing to warn about.
-  if (d.date < today() || marksOf(d.id).length || d.gf !== '') return false;
+  if (d.off || d.date < today() || marksOf(d.id).length || d.gf !== '') return false;
   const going = rows('Avisos').filter(a => a['Día ID'] === d.id && a['Tipo'] === 'Asistiré').map(a => a['Jugador ID']);
   const ids = calledUp(d);
   return !players().some(p => ids.includes(p['ID']) && going.includes(p['ID']) && isKeeper(p));

@@ -1,6 +1,7 @@
 'use strict';
 /** What each version brought, newest first, for the directiva. Add a line here with every change. */
 const CHANGELOG = [
+  ["0.28.0", "24/11/2026", ["Calendario de liga con ida y vuelta", "Aplazar partidos y suspender entrenos", "Al cambiar la fecha, borrar respuestas y avisar al grupo", "Buscador para la directiva y el entrenador", "Versiones de prueba (solo directiva)"]],
   ["0.27.1", "24/11/2026", ["Clasificación: aviso de los partidos de liga jugados a los que les falta el resultado"]],
   ["0.27.0", "24/11/2026", ["Nueva pestaña Clasificación en Inicio: la tabla de la liga con nuestros partidos del acta y los resultados de los demás equipos, que mete la directiva."]],
   ["0.26.0", "23/11/2026", ["Lista «Quién viene» en cada día", "Entrenador en la plantilla", "Quién dirigió y banquillo en el acta", "Estadísticas del entrenador", "Aviso si el entrenador no puede ir", "Notas privadas del entrenador", "Plazo para responder", "Voy / Tarde / No voy en una fila", "El próximo partido, una sola vez", "Días: primero lo que viene", "Convocar de un toque a los que van", "Confirmar y enviar la convocatoria a la vez", "«Quedamos a las» para la hora de quedar", "Votar el MVP más tarde", "Nuevo día con formulario corto", "Pasar lista en una fila por jugador", "Acta: goleador con un toque", "Plantilla única", "Barra inferior para directiva y entrenador", "Lista de pendientes en Inicio", "Se ve qué se puede pulsar"]],
@@ -58,6 +59,8 @@ function render() {
   renderStatus(); renderNav();
   // Only the directiva follows what changes from version to version.
   $('news').classList.toggle('hidden', ROLE() !== 'Directiva');
+  // The search is for the staff: actions, days and players one tap away.
+  $('search').classList.toggle('hidden', !can.search());
   document.body.classList.toggle('wide', can.club());
   if (!S.datos) { $('view').innerHTML = '<p class="small">Cargando los datos de la hoja…</p>'; return; }
   let h;
@@ -101,6 +104,7 @@ function closeDialog() {
   if (typeof dlg.close === 'function' && dlg.open) dlg.close();
   else dlg.removeAttribute('open');
   dlg.classList.remove('fallback');
+  dlg.classList.remove('search');
 }
 
 /**
@@ -111,7 +115,8 @@ function closeDialog() {
 function openDialog(html, setup, onOk) {
   const dlg = $('dlg');
   dlg.innerHTML = html;
-  dlg.onclick = null; dlg.onchange = null;
+  dlg.onclick = null; dlg.onchange = null; dlg.oninput = null;
+  dlg.classList.remove('search');
   if (setup) setup(dlg);
   dlg.onsubmit = e => {
     e.preventDefault();
@@ -136,7 +141,7 @@ function confirmDialog(title, text, ok, action) {
 
 // ---------- actions ----------
 const ACT = {
-  tab: ds => { S.tab = ds.tab; S.day = null; S.open = null; render(); window.scrollTo(0, 0); },
+  tab: ds => { S.tab = ds.tab; S.day = null; S.open = null; S.announce = null; render(); window.scrollTo(0, 0); },
   sub: ds => { S.sub = ds.sub; render(); },
   homeTab: ds => { S.homeTab = ds.sub; render(); window.scrollTo(0, 0); },
   addResult: () => resultDialog(''),
@@ -147,13 +152,21 @@ const ACT = {
   ics: ds => calendar(ds.day),
   addDay: () => addDay(),
   seasonTrainings: () => seasonTrainingsDialog(),
-  openDay: ds => { S.day = ds.day; S.part = null; render(); window.scrollTo(0, 0); },
+  leagueCalendar: () => leagueCalendarDialog(),
+  openDay: ds => { S.day = ds.day; S.part = null; S.announce = null; render(); window.scrollTo(0, 0); },
   // A task on Inicio opens its day, or the fines when it has none.
   todo: ds => { S.tab = ds.day ? 'dias' : 'multas'; S.day = ds.day || null; S.part = null; S.open = null; render(); window.scrollTo(0, 0); },
   togglePast: () => { S.showPast = !S.showPast; render(); },
   dayHead: ds => { S.headOpen = S.headOpen === ds.day ? null : ds.day; render(); },
   who: ds => whoDialog(ds.day),
-  closeDay: () => { S.day = null; render(); },
+  closeDay: () => { S.day = null; S.announce = null; render(); },
+  // Postponing or cancelling, taking it back, a new date, and telling the group.
+  dayOff: ds => offDialog(ds.day),
+  dayOn: ds => dayOn(ds.day),
+  newDate: ds => newDateDialog(ds.day),
+  offWhatsApp: ds => { const d = findDay(ds.day); if (d) shareText(offMessage(d)); },
+  announce: () => { if (S.announce) shareText(S.announce.text); S.announce = null; render(); },
+  noAnnounce: () => { S.announce = null; render(); },
   deleteDay: ds => deleteDay(ds.day),
   dayKind: ds => setKind(ds.day, ds.kind),
   side: ds => { const d = findDay(ds.day); if (d) send({ t: 'Partidos', op: 'e', v: { 'ID': ds.day, 'Local/Visitante': d.side === ds.side ? '' : ds.side } }); },
@@ -210,7 +223,8 @@ function noticeForDialog(dayId, pid) {
 }
 
 const CHG = {
-  dayDate: el => dayField(el.dataset.day, 'date', el.value),
+  // A new date may ask about the answers already given: blurred first, so the page can redraw.
+  dayDate: el => { const v = el.value; el.blur(); changeDate(el.dataset.day, v); },
   dayTitle: el => dayField(el.dataset.day, 'title', el.value),
   dayTime: el => dayField(el.dataset.day, 'time', el.value),
   dayMeet: el => dayField(el.dataset.day, 'meet', el.value),
@@ -314,6 +328,7 @@ function show() {
 }
 
 $('refresh').onclick = () => sync();
+$('search').onclick = () => searchDialog();
 $('news').onclick = () => openDialog('<form method="dialog"><div class="title">Novedades y cambios</div>'
   + CHANGELOG.map(v => '<h2>' + esc(v[0] + ' · ' + v[1]) + '</h2>' + v[2].map(c => '<p class="small">• ' + esc(c) + '</p>').join('')).join('')
   + '<div class="row end"><button type="button" class="btn" value="cancel">Cerrar</button></div></form>');
