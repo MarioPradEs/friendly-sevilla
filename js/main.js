@@ -1,6 +1,7 @@
 'use strict';
 /** What each version brought, newest first, for the directiva. Add a line here with every change. */
 const CHANGELOG = [
+  ["0.27.1", "24/11/2026", ["Clasificación: aviso de los partidos de liga jugados a los que les falta el resultado"]],
   ["0.27.0", "24/11/2026", ["Nueva pestaña Clasificación en Inicio: la tabla de la liga con nuestros partidos del acta y los resultados de los demás equipos, que mete la directiva."]],
   ["0.26.0", "23/11/2026", ["Lista «Quién viene» en cada día", "Entrenador en la plantilla", "Quién dirigió y banquillo en el acta", "Estadísticas del entrenador", "Aviso si el entrenador no puede ir", "Notas privadas del entrenador", "Plazo para responder", "Voy / Tarde / No voy en una fila", "El próximo partido, una sola vez", "Días: primero lo que viene", "Convocar de un toque a los que van", "Confirmar y enviar la convocatoria a la vez", "«Quedamos a las» para la hora de quedar", "Votar el MVP más tarde", "Nuevo día con formulario corto", "Pasar lista en una fila por jugador", "Acta: goleador con un toque", "Plantilla única", "Barra inferior para directiva y entrenador", "Lista de pendientes en Inicio", "Se ve qué se puede pulsar"]],
   ["0.25.1", "23/11/2026", ["En la plantilla, primero jugador o portero y luego la posición"]],

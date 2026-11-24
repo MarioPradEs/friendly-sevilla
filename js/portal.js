@@ -556,6 +556,12 @@ function leagueGames() {
     homeGoals: r.homeGoals, awayGoals: r.awayGoals, resultId: r.id }));
   return ours.concat(others).sort((a, b) => b.date.localeCompare(a.date));
 }
+/** Our league matches already played (before today) with no score yet: they do not count until the report has it. */
+function leagueMissing() {
+  const t = today();
+  return days().filter(d => d.match && d.session === 'Partido' && d.date < t && d.title.trim() && !(isWhole(d.gf) && isWhole(d.ga)))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
 /** Everyone who has played, best first: points (3 a win, 1 a draw), goal difference, goals scored, then name. */
 function leagueTable() {
   const own = clubId();
@@ -585,6 +591,16 @@ function viewLeague() {
   const edit = can.league();
   let h = can.club() ? seasonBar() : '';
   if (edit) h += '<div class="row"><button class="btn primary wide" data-act="addResult"' + (rivals().length >= 2 ? '' : ' disabled') + '>+ Resultado</button></div>';
+  const missing = leagueMissing();
+  if (missing.length) {
+    // Whoever fills in the report can go straight to the match; the rest just see which ones.
+    h += '<div class="card todo"><div class="title">⚠️ ' + (missing.length === 1 ? 'A este partido le falta el resultado' : 'A estos partidos les falta el resultado') + '</div>'
+      + missing.map(d => {
+        const text = esc(d.title.trim() + ' · ' + shortDay(d.date));
+        return can.report() ? '<button class="todo-line" data-act="todo" data-day="' + esc(d.id) + '"><span>' + text + '</span><span class="arrow">›</span></button>'
+          : '<div class="line"><span>' + text + '</span></div>';
+      }).join('') + '<div class="small">No cuentan en la tabla hasta que el acta tenga el resultado.</div></div>';
+  }
   if (!table.length) return h + '<p class="small">Aún no hay resultados de liga. Los nuestros salen del acta; los de los demás equipos los mete la directiva.</p>';
   const heads = ['PJ', 'G', 'E', 'P', 'GF', 'GC', 'DG', 'Pts'];
   h += '<div class="card standings"><table><thead><tr><th>#</th><th class="team">Equipo</th>' + heads.map(x => '<th>' + x + '</th>').join('') + '</tr></thead><tbody>'
