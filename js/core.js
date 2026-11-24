@@ -9,7 +9,9 @@ const STATES = ['OK', 'Tarde', 'Falta', 'No puede'];
 const REASONS = ['Lesión', 'Trabajo', 'Otro'];
 const KINDS = [['Entrenamiento', ''], ['Partido', 'Liga'], ['Amistoso', 'Amistoso'], ['Evento o torneo', 'Torneo']];
 const CHARGE_CATEGORIES = ['Cuota', 'Equipación', 'Ropa', 'Otro'];
-const MOVEMENT_CATEGORIES = ['Cuota', 'Equipación', 'A cuenta', 'Arbitraje', 'Campo', 'Material', 'Federación', 'Comida', 'Otro'];
+const MOVEMENT_CATEGORIES = ['Cuota', 'Equipación', 'A cuenta', 'Arbitraje', 'Entrenador', 'Campo', 'Material', 'Federación', 'Comida', 'Otro'];
+/** Paying the coach is a club expense of its own, so the season's total can be seen. */
+const COACH_CATEGORY = 'Entrenador';
 const SHEET_FINE_REASONS = ['Tarde', 'Equipación', 'Amarilla', 'Doble amarilla', 'Roja', 'Otro'];
 const CARDS = ['Amarilla', 'Doble amarilla', 'Roja'];
 

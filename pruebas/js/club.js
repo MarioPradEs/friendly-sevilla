@@ -1204,7 +1204,9 @@ function viewAccounts() {
   const mov = rows('Contabilidad').filter(m => inSeason(m)).sort((a, b) => String(b['Fecha']).localeCompare(a['Fecha']));
   const sum = t => mov.filter(m => m['Tipo'] === t).reduce((s, m) => s + cents(m['Importe']), 0);
   const view = S.accView || 'Movimientos';
-  let h = seasonBar() + '<div class="row between"><div><div class="title">Saldo: ' + money(sum('Ingreso') - sum('Gasto')) + '</div><div class="small">Ingresos ' + money(sum('Ingreso')) + ' · Gastos ' + money(sum('Gasto')) + '</div></div>'
+  const coachPaid = mov.filter(m => m['Tipo'] === 'Gasto' && m['Categoría'] === COACH_CATEGORY).reduce((s, m) => s + cents(m['Importe']), 0);
+  let h = seasonBar() + '<div class="row between"><div><div class="title">Saldo: ' + money(sum('Ingreso') - sum('Gasto')) + '</div><div class="small">Ingresos ' + money(sum('Ingreso')) + ' · Gastos ' + money(sum('Gasto')) + '</div>'
+    + (coachPaid ? '<div class="small bold">Pagado al entrenador: ' + money(coachPaid) + '</div>' : '') + '</div>'
     + (editable() ? '<button class="btn primary" data-act="newMovement">+ Movimiento</button>' : '') + '</div>'
     + '<div class="chips">' + ['Movimientos', 'Por jugador'].map(v => '<button class="btn' + (view === v ? ' on' : '') + '" data-act="accView" data-view="' + v + '">' + v + '</button>').join('') + '</div>';
   if (view === 'Movimientos') {
@@ -1270,7 +1272,7 @@ function movementDialog() {
       + '<label for="mvDate">Fecha</label><input id="mvDate" type="date" value="' + today() + '">'
       + '<label>Categoría</label><div class="chips">' + cats.map(c => '<button type="button" class="btn' + (category === c ? ' on' : '') + '" data-pick="cat" data-val="' + c + '">' + c + '</button>').join('') + '</div>'
       + '<label for="mvConcept">Motivo</label><input id="mvConcept" maxlength="80"><label for="mvAmount">Importe en euros</label><input id="mvAmount" inputmode="decimal">'
-      + '<label for="mvPid">Jugador (opcional)</label>' + pickPlayer('mvPid', players(), pid, 'Ninguno')
+      + '<label for="mvPid">Persona (opcional)</label>' + pickPlayer('mvPid', players(), pid, 'Ninguno')
       + '<div class="row end"><button type="button" class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok">Guardar</button></div></form>';
   };
   openDialog(draw(), dlg => {
@@ -1281,7 +1283,12 @@ function movementDialog() {
       const keep = [$('mvDate').value, $('mvConcept').value, $('mvAmount').value];
       pid = $('mvPid').value;
       if (b.dataset.pick === 'kind') { kind = b.dataset.val; category = ''; }
-      if (b.dataset.pick === 'cat') category = b.dataset.val;
+      if (b.dataset.pick === 'cat') {
+        category = b.dataset.val;
+        // Paying the coach: with one coach in the squad, he is filled in.
+        const coaches = players().filter(p => p['Posición'] === 'Entrenador');
+        if (category === COACH_CATEGORY && !pid && coaches.length === 1) pid = coaches[0]['ID'];
+      }
       dlg.innerHTML = draw();
       $('mvDate').value = keep[0]; $('mvConcept').value = keep[1]; $('mvAmount').value = keep[2];
     };

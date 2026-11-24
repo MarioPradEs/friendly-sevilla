@@ -1,6 +1,7 @@
 'use strict';
 /** What each version brought, newest first, for the directiva. Add a line here with every change. */
 const CHANGELOG = [
+  ["0.28.1", "24/11/2026", ["Gastos: categoría Entrenador y lo pagado al entrenador en Cuentas", "Inicio: próximo partido arriba, luego tus estadísticas y los pendientes en naranja"]],
   ["0.28.0", "24/11/2026", ["Calendario de liga con ida y vuelta", "Aplazar partidos y suspender entrenos", "Al cambiar la fecha, borrar respuestas y avisar al grupo", "Buscador para la directiva y el entrenador", "Versiones de prueba (solo directiva)"]],
   ["0.27.1", "24/11/2026", ["Clasificación: aviso de los partidos de liga jugados a los que les falta el resultado"]],
   ["0.27.0", "24/11/2026", ["Nueva pestaña Clasificación en Inicio: la tabla de la liga con nuestros partidos del acta y los resultados de los demás equipos, que mete la directiva."]],

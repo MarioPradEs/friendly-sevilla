@@ -10,23 +10,22 @@ function viewHome() {
   if (!me) h += '<p class="small">Tu cuenta no está unida a ningún jugador. Pide a la directiva que ponga tu Jugador ID en la pestaña Usuarios.</p>';
   // What the player still owes in fines, to be paid before the next match.
   const owed = me ? fines(f => f.player === me).reduce((s, f) => s + f.rest, 0) : 0;
-  if (owed > 0) h += '<div class="card"><span class="bold warn">Llevas ' + money(owed) + ' sin pagar en multas. Págalas antes del próximo partido.</span></div>';
-  // For the staff, what is left to do comes first, each a tap from its day.
-  h += todoCard(todoList());
   const meRow = me ? rows('Jugadores').find(r => r['ID'] === me) : null;
   const meCoach = isCoach(meRow);
   // A postponed match is not the next one: it waits for its new date.
   const nextMatch = upcoming.find(d => d.match && !d.off && d.gf === '');
   // The first day still without my answer, if it is not the match: right at the top, so nobody forgets.
   const toAnswer = me ? upcoming.find(d => d !== nextMatch && !d.off && !noticeOf(d.id, me) && canAnswer(d, me, meCoach)) : null;
-  if (toAnswer) h += '<h2>Te falta responder</h2>' + dayCard(toAnswer, me, meCoach, false);
-  // The next match, big, with the answer right there; it is not repeated below.
+  // Always on top: the next match, then how I am doing, then what is left to do (in orange).
   if (nextMatch) h += dayCard(nextMatch, me, meCoach, true);
+  if (owed > 0) h += '<div class="card"><span class="bold warn">Llevas ' + money(owed) + ' sin pagar en multas. Págalas antes del próximo partido.</span></div>';
+  if (me) h += attendanceCard(me);
+  if (meCoach) h += coachCard(me);
+  h += todoCard(todoList());
+  if (toAnswer) h += '<h2>Te falta responder</h2>' + dayCard(toAnswer, me, meCoach, false);
   // Matches still being voted, where this player was called up.
   if (me) allDays().filter(d => voteOpen(d) && squad(d).includes(me)).forEach(d => { h += voteCard(d, me); });
   h += birthdayCard();
-  if (me) h += attendanceCard(me);
-  if (meCoach) h += coachCard(me);
   const rest = upcoming.filter(d => d !== nextMatch && d !== toAnswer);
   if (rest.length) h += '<h2>Próximos días</h2>';
   if (!upcoming.length) h += '<p class="small">No hay nada apuntado todavía.</p>';
