@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Friendly Sevilla Club · PRUEBAS</title>
+<meta name="theme-color" content="#111111">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Friendly">
+<link rel="icon" href="escudo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icono-180.png">
+<link rel="manifest" href="manifest.json">
+<style>
+:root {
+  --bg: #0e0e0e; --surface: #1d1b18; --surface2: #2a2721; --line: #3a362e;
+  --text: #f1e9d6; --muted: #b9ad92; --gold: #d9c79c; --gold-deep: #ae9968;
+  --green: #81c784; --orange: #ffb74d; --red: #f08a7e;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+body { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:disabled { cursor: default; opacity: .45; }
+header { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px; padding: calc(10px + env(safe-area-inset-top)) 16px 10px; background: #151515; }
+header img { width: 32px; height: 44px; }
+header h1 { flex: 1; margin: 0; font-size: 20px; font-weight: 600; }
+.icon-btn { background: none; border: 0; padding: 8px; font-size: 20px; line-height: 1; }
+.status { padding: 4px 16px 8px; font-size: 13px; color: var(--muted); background: #151515; }
+.error { color: var(--red); }
+main { padding: 12px 16px; max-width: 640px; margin: 0 auto; }
+body.wide main { max-width: 900px; }
+h2 { font-size: 18px; margin: 14px 0 8px; font-weight: 600; }
+hr { border: 0; border-top: 1px solid var(--line); margin: 10px 0; }
+.card { background: var(--surface); border-radius: 16px; padding: 14px; margin-bottom: 10px; }
+.tap { cursor: pointer; }
+.title { font-weight: 600; font-size: 17px; }
+.name { font-weight: 600; }
+.small { font-size: 14px; color: var(--muted); }
+.bold { font-weight: 700; }
+.notice { color: var(--gold); font-weight: 700; font-size: 14px; margin-top: 2px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+.row.between { justify-content: space-between; }
+.row.end { justify-content: flex-end; margin-top: 16px; }
+.row.nowrap { flex-wrap: nowrap; }
+.mt { margin-top: 10px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 8px 16px; }
+.btn.primary { background: var(--gold-deep); border-color: var(--gold-deep); color: #111; font-weight: 600; }
+.btn.on { background: var(--gold); border-color: var(--gold); color: #111; font-weight: 600; }
+.btn.danger { border-color: var(--red); color: var(--red); }
+.btn.wide { width: 100%; }
+.link { background: none; border: 0; padding: 8px 0; color: var(--gold); text-decoration: none; display: inline-block; margin-right: 18px; }
+.danger-text { color: var(--red); margin-right: 0; margin-left: 12px; }
+.warn { color: var(--red); }
+.big { font-size: 28px; line-height: 1.2; }
+.right-text { text-align: right; }
+.dots { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
+.dot { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 11px; font-weight: 700; }
+.match-card { background: #111; color: #fff; }
+.match-card .gold { color: #d9c48a; } .match-card .small { color: rgba(255,255,255,.85); }
+.match-title { font-size: 20px; font-weight: 700; margin: 4px 0; }
+.pill { background: #a89565; color: #111; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 700; }
+.gold-btn { background: #a89565; color: #111; border: none; font-weight: 700; text-decoration: none; }
+.statline { display: flex; justify-content: space-between; text-align: center; margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(128,128,128,.3); }
+.dot.v { background: #2e7d32; } .dot.x { background: var(--red); } .dot.n { background: #9e9e9e; }
+.btn.full { width: 100%; }
+.line { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid #24221e; }
+.line:last-child { border-bottom: 0; }
+.right { display: flex; align-items: center; gap: 4px; text-align: right; flex-shrink: 0; }
+.right.col { flex-direction: column; align-items: flex-end; }
+.paid { color: var(--green); }
+.part { color: var(--orange); }
+.owed { color: var(--red); }
+.total { font-weight: 700; font-size: 18px; }
+.num { width: 32px; font-weight: 700; flex-shrink: 0; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+.season { margin-top: 0; margin-bottom: 8px; }
+nav { position: fixed; bottom: 0; left: 0; right: 0; display: flex; background: #181715; border-top: 1px solid #24221e; padding-bottom: env(safe-area-inset-bottom); z-index: 5; }
+nav button { flex: 1; min-width: 0; background: none; border: 0; padding: 10px 0 12px; font-size: 12px; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 2px; }
+nav button .ico { font-size: 19px; }
+nav button.on { color: var(--gold); font-weight: 600; }
+label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+label.inline { display: inline; margin: 0; }
+label.check { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 16px; color: var(--text); }
+label.check input { width: 20px; height: 20px; flex-shrink: 0; }
+input, select, textarea { width: 100%; font: inherit; color: var(--text); background: var(--surface2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+select { width: auto; padding: 6px 10px; }
+input:disabled { opacity: .6; }
+input.narrow { width: 90px; flex-shrink: 0; }
+.player { padding: 10px 0; border-bottom: 1px solid #24221e; }
+.player .row { margin-top: 0; }
+.marks { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.marks .btn { padding: 7px 12px; }
+.mark-OK.on { background: var(--green); border-color: var(--green); }
+.mark-Tarde.on { background: var(--orange); border-color: var(--orange); }
+.mark-Falta.on { background: var(--red); border-color: var(--red); }
+.mark-Nopuede.on { background: #9db7e8; border-color: #9db7e8; }
+.kit.on { background: var(--red); border-color: var(--red); color: #111; }
+#login { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px; text-align: center; }
+#login img { width: 150px; }
+.login-name { width: min(320px, 100%); text-align: left; }
+#loginMsg.ok { color: var(--gold); }
+.app-link { display: block; text-align: center; text-decoration: none; margin: 4px 0 12px; }
+#loginApp { width: min(320px, 100%); }
+#login h1 { margin: 0; font-size: 24px; }
+dialog { background: var(--surface); color: var(--text); border: 0; border-radius: 18px; padding: 18px; width: min(94vw, 520px); max-height: 90vh; overflow: auto; }
+dialog::backdrop { background: rgba(0,0,0,.6); }
+.toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--gold); color: #111; padding: 10px 16px; border-radius: 12px; font-weight: 600; z-index: 9; }
+.parts { display: flex; gap: 6px; margin-top: 8px; }
+.parts .btn { flex: 1; padding: 8px 4px; white-space: nowrap; font-size: 15px; }
+select.full { width: 100%; padding: 10px 12px; }
+/* iPhones before iOS 15.4 have no <dialog>: shown as a box over the page. */
+dialog.fallback { display: block; position: fixed; top: 5vh; left: 50%; transform: translateX(-50%); z-index: 20; box-shadow: 0 0 0 100vmax rgba(0,0,0,.6); }
+@media (max-width: 480px) {
+  .btn { padding: 7px 12px; }
+  .chips { gap: 5px; }
+  main { padding: 10px 12px; }
+}
+/* Tappable vs data: filled = main action, outlined = secondary, › or ▾ = opens, ✏️ = a value to change. */
+.btn.sm { padding: 5px 12px; font-size: 14px; }
+a.btn { display: inline-block; text-decoration: none; }
+.grow { flex: 1; min-width: 0; }
+.row.tight { margin-top: 0; gap: 6px; }
+.arrow { color: var(--muted); font-size: 20px; line-height: 1; flex-shrink: 0; }
+.head { margin-top: 0; }
+.who { white-space: nowrap; font-size: 14px; padding: 8px 10px; }
+.answer { display: flex; gap: 6px; margin-top: 10px; }
+.answer .btn { flex: 1; padding: 9px 4px; white-space: nowrap; }
+.field { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; text-align: left; background: var(--surface2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 15px; }
+.field .pen { flex-shrink: 0; color: var(--muted); }
+.fold { display: block; background: none; border: 0; padding: 0; margin: 14px 0 8px; font-size: 18px; font-weight: 600; color: var(--text); }
+.fold:disabled { opacity: 1; }
+.todo { background: var(--surface2); padding-bottom: 6px; }
+.todo-line { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; text-align: left; background: none; border: 0; border-top: 1px solid var(--line); padding: 10px 0; margin-top: 6px; }
+.box { width: 40px; height: 40px; flex-shrink: 0; border-radius: 8px; border: 1px solid var(--line); background: transparent; padding: 0; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.box.ok.on { background: #2e7d32; border-color: #2e7d32; color: #fff; }
+.box.late.on { background: #ef6c00; border-color: #ef6c00; color: #fff; }
+.box.miss.on { background: var(--red); border-color: var(--red); color: #111; }
+.box.more { border-color: transparent; font-size: 20px; }
+.player .row.nowrap { gap: 4px; }
+.menu { display: flex; flex-direction: column; margin-top: 8px; }
+.menu-item { background: none; border: 0; border-top: 1px solid var(--line); text-align: left; padding: 12px 4px; }
+/* League table: plain data, our row stands out; a typed-in result the directiva can correct shows ✏️. */
+.standings { padding: 8px 6px; overflow-x: auto; }
+.standings table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.standings th, .standings td { padding: 6px 4px; text-align: right; white-space: nowrap; }
+.standings th { color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--line); }
+.standings .team { text-align: left; width: 100%; max-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.standings tr.own td { background: rgba(217,199,156,.16); color: var(--gold); font-weight: 700; }
+.line.edit { cursor: pointer; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin: 6px 0; }
+.line.edit:last-child { border-bottom: 1px solid var(--line); }
+.line .pen { flex-shrink: 0; color: var(--muted); }
+/* A day postponed or cancelled: why, in the error colour. */
+.off-card { border: 1px solid var(--red); }
+/* League calendar: a date that changes on a tap, the picker laid over its button. */
+.fixture { padding: 8px 0; border-bottom: 1px solid #24221e; }
+.fixture select.full { margin-top: 6px; }
+.datebtn { position: relative; white-space: nowrap; }
+.datebtn input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; padding: 0; border: 0; cursor: pointer; }
+/* The staff search takes the whole screen. */
+dialog.search { width: 100vw; max-width: 100vw; height: 100vh; max-height: 100vh; margin: 0; border-radius: 0; padding: calc(10px + env(safe-area-inset-top)) 16px 16px; }
+dialog.search.fallback { top: 0; left: 0; transform: none; }
+dialog.search #searchQ { flex: 1; }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div id="login" class="hidden">
+  <img src="escudo.svg" alt="Escudo del Friendly Sevilla">
+  <h1>Friendly Sevilla Club</h1>
+  <div class="small">Entra con tu cuenta de Google. Si es tu primera vez, escribe antes tu nombre y la directiva recibirá tu solicitud.</div>
+  <div id="gbtn"></div>
+  <div class="login-name">
+    <label for="loginName">Tu nombre (la primera vez, para pedir acceso)</label>
+    <input id="loginName" type="text" maxlength="40" autocomplete="name" placeholder="Nombre y apellido">
+  </div>
+  <div id="loginMsg" class="error"></div>
+  <div id="loginApp"></div>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <img src="escudo.svg" alt="">
+    <h1>Friendly Sevilla</h1>
+    <button class="icon-btn hidden" id="search" title="Buscar" aria-label="Buscar">🔍</button>
+    <button class="icon-btn hidden" id="news" title="Novedades y cambios" aria-label="Novedades y cambios">★</button>
+    <button class="icon-btn" id="refresh" title="Actualizar" aria-label="Actualizar">⟳</button>
+    <button class="icon-btn" id="logout" title="Salir" aria-label="Salir">⇥</button>
+  </header>
+  <div class="status" id="status"></div>
+  <main id="view"></main>
+  <nav id="nav"></nav>
+</div>
+
+<dialog id="dlg"></dialog>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="js/core.js?v=40"></script>
+<script src="js/portal.js?v=40"></script>
+<script src="js/club.js?v=40"></script>
+<script src="js/main.js?v=40"></script>
+</body>
+</html>
