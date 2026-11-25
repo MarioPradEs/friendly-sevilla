@@ -954,12 +954,13 @@ function pickRival(round, index, rival) {
 function createFixtures(fixtures) {
   const taken = new Set(allDays().filter(d => d.match && d.session === 'Partido').map(d => d.date + '|' + d.title.trim().toLowerCase()));
   const ops = [];
-  fixtures.forEach(f => {
+  // In order, ida then vuelta: the position is the jornada number.
+  fixtures.forEach((f, i) => {
     const key = f.date + '|' + f.rival.trim().toLowerCase();
     if (!f.rival.trim() || taken.has(key)) return;
     taken.add(key);
     ops.push({ t: 'Partidos', op: 'u', v: { 'ID': uid(), 'Fecha': f.date, 'Tipo': 'Liga', 'Rival': f.rival.trim(), 'Local/Visitante': f.home ? 'Local' : 'Visitante',
-      'Hora partido': '', 'Temporada': activeSeason() } });
+      'Hora partido': '', 'Jornada': String(i + 1), 'Temporada': activeSeason() } });
   });
   send(ops);
   return ops.length;

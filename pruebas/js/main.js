@@ -1,6 +1,7 @@
 'use strict';
 /** What each version brought, newest first, for the directiva. Add a line here with every change. */
 const CHANGELOG = [
+  ["0.29.0", "25/11/2026", ["Jornadas: los 6 partidos de cada jornada, el nuestro también, con su fecha y sus goles", "Nuestro partido de la jornada sale en Días para la convocatoria, la lista y el acta", "Clasificación por jornada: la última jugada, con aviso de los partidos sin resultado", "El calendario oficial numera las jornadas"]],
   ["0.28.2", "25/11/2026", ["Clasificación: resultados de toda la jornada de una vez", "Voy / Tarde / No voy sin color hasta que eliges uno", "Buscador: la ficha ya no se vuelve a abrir al cambiar de sección", "Inicio: solo el próximo partido y el próximo entreno, el resto con «Ver más»", "Clasificación: solo la última jornada y aviso de los que no tienen resultado"]],
   ["0.28.1", "24/11/2026", ["Gastos: categoría Entrenador y lo pagado al entrenador en Cuentas", "Inicio: próximo partido arriba, luego tus estadísticas y los pendientes en naranja"]],
   ["0.28.0", "24/11/2026", ["Calendario de liga con ida y vuelta", "Aplazar partidos y suspender entrenos", "Al cambiar la fecha, borrar respuestas y avisar al grupo", "Buscador para la directiva y el entrenador", "Versiones de prueba (solo directiva)"]],
@@ -148,6 +149,7 @@ const ACT = {
   homeTab: ds => { S.homeTab = ds.sub; render(); window.scrollTo(0, 0); },
   addResult: () => resultDialog(''),
   addRound: () => roundDialog(),
+  editRound: ds => roundDialog(Number(ds.n)),
   foldDays: () => { S.allDays = !S.allDays; render(); },
   allResults: () => { S.allResults = !S.allResults; render(); },
   editResult: ds => resultDialog(ds.id),

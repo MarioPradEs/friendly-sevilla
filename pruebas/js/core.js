@@ -213,6 +213,7 @@ function dayOf(r, match) {
     confirmed: isTrue(r['Convocatoria confirmada']), gf: r['Goles a favor'] || '', ga: r['Goles en contra'] || '',
     // "Aplazado" lives in off, so taking it back leaves the match as it was.
     status: offOf(r) ? '' : r['Estado'] || '', season: r['Temporada'] || '', deadline: r['Responder antes'] || '',
+    round: String(r['Jornada'] || '').trim(),
     off: offOf(r), offReason: offOf(r) ? r['Motivo'] || '' : '', row: r,
   };
 }
