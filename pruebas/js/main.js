@@ -1,6 +1,7 @@
 'use strict';
 /** What each version brought, newest first, for the directiva. Add a line here with every change. */
 const CHANGELOG = [
+  ["0.29.3", "25/11/2026", ["App: Modo developer (solo Mario): ver la app como directiva, entrenador, lista, jugador o portero"]],
   ["0.29.2", "25/11/2026", ["Convocatoria: el dorsal de cada jugador al lado de su nombre"]],
   ["0.29.1", "25/11/2026", ["Clasificación: elige la jornada que quieres ver, o todas de la más reciente a la más antigua", "Las jornadas por jugar enseñan sus partidos y fechas"]],
   ["0.29.0", "25/11/2026", ["Jornadas: los 6 partidos de cada jornada, el nuestro también, con su fecha y sus goles", "Nuestro partido de la jornada sale en Días para la convocatoria, la lista y el acta", "Clasificación por jornada: la última jugada, con aviso de los partidos sin resultado", "El calendario oficial numera las jornadas"]],
