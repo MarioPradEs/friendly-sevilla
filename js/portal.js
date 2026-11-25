@@ -585,6 +585,29 @@ function splitUpcoming(rest, above) {
 }
 
 /**
+ * Jornada [n] as Clasificación shows it: its results (oldest first), the matches still without score
+ * (maybe not played yet) and the teams with no match in it. Same as the app's LeaguePlan.round.
+ */
+function leagueRound(n) {
+  const own = clubId();
+  const everyone = allLeagueTeams();
+  const name = id => (everyone.find(x => x.id === id) || { name: '?' }).name;
+  const rows = roundGames(n).filter(g => g.home && g.away);
+  const busy = new Set(rows.flatMap(g => [g.home, g.away]));
+  const dates = rows.map(g => g.date).filter(Boolean).sort();
+  return { number: n, from: dates[0] || '', to: dates[dates.length - 1] || '',
+    games: leagueGames().filter(g => String(g.round) === String(n)).sort((a, b) => a.date.localeCompare(b.date)),
+    pending: rows.filter(g => g.hg === null || g.ag === null).sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+      .map(g => ({ date: g.date, home: name(g.home), away: name(g.away), ours: g.home === own || g.away === own })),
+    waiting: everyone.filter(x => !busy.has(x.id)).map(x => x.name) };
+}
+
+/** The jornadas with at least one result, newest first: what "Todas" lists. */
+function leaguePlayedRounds() {
+  return Array.from(new Set(leagueGames().map(g => String(g.round || '').trim()).filter(x => /^\d+$/.test(x)).map(Number))).sort((a, b) => b - a);
+}
+
+/**
  * The last round played. With jornada numbers: the highest one with a score in any match, up to
  * today. Without (results typed before numbers): the week (Monday to Sunday) of the latest league
  * date up to today. Its results, the matches with no score yet and the teams with no match at all.
@@ -596,16 +619,7 @@ function leagueLastRound() {
   const everyone = allLeagueTeams();
   const name = id => (everyone.find(x => x.id === id) || { name: '?' }).name;
   const numbered = all.filter(g => g.date <= t && /^\d+$/.test(String(g.round || '').trim()));
-  if (numbered.length) {
-    const n = Math.max.apply(null, numbered.map(g => Number(g.round)));
-    const rows = roundGames(n).filter(g => g.home && g.away);
-    const busy = new Set(rows.flatMap(g => [g.home, g.away]));
-    const dates = rows.map(g => g.date).filter(Boolean).sort();
-    return { number: n, from: dates[0] || '', to: dates[dates.length - 1] || '', games: all.filter(g => String(g.round) === String(n)),
-      pending: rows.filter(g => g.hg === null || g.ag === null).sort((a, b) => (a.date || '').localeCompare(b.date || ''))
-        .map(g => ({ date: g.date, home: name(g.home), away: name(g.away), ours: g.home === own || g.away === own })),
-      waiting: everyone.filter(x => !busy.has(x.id)).map(x => x.name) };
-  }
+  if (numbered.length) return leagueRound(Math.max.apply(null, numbered.map(g => Number(g.round))));
   const ourAll = days().filter(d => d.match && !d.off && d.session === 'Partido' && d.title.trim());
   const ourDays = ourAll.filter(d => d.date <= t);
   const scored = all.filter(g => g.date <= t);
@@ -677,37 +691,57 @@ function viewLeague() {
       + [r.played, r.won, r.drawn, r.lost, r.goalsFor, r.goalsAgainst, r.goalDiff > 0 ? '+' + r.goalDiff : r.goalDiff].map(c => '<td>' + c + '</td>').join('')
       + '<td class="bold">' + r.points + '</td></tr>').join('') + '</tbody></table></div>';
   const last = leagueLastRound();
-  const inRound = last ? last.games : [];
-  const gkey = g => [g.date, g.homeId, g.awayId, g.resultId].join('|');
-  const older = games.filter(g => !inRound.some(r => gkey(r) === gkey(g)));
-  const span = last && last.from ? (last.from === last.to ? fdate(last.from) : 'Del ' + fdate(last.from) + ' al ' + fdate(last.to)) : '';
-  h += '<div class="row between"><h2>' + (last && last.number ? 'Jornada ' + last.number : 'Última jornada') + '</h2>'
-    + (edit && last && last.number ? '<button class="btn sm" data-act="editRound" data-n="' + last.number + '">Editar</button>' : '') + '</div>'
-    + (span ? '<div class="small">' + esc(span) + '</div>' : '');
-  if (last) last.pending.forEach(g => {
-    h += '<div class="card todo"><div class="small">' + esc((g.date ? fdate(g.date) : 'Fecha por confirmar') + (g.ours ? ' · nuestro partido' : '')) + '</div>'
-      + '<div' + (g.ours ? ' class="bold"' : '') + '>' + esc(g.home + ' – ' + g.away) + '</div>'
-      + '<div class="small">⚠️ Sin resultado: quizá aún no se ha jugado.</div></div>';
-  });
-  if (last && last.waiting.length) {
-    h += '<div class="card todo"><div class="small">' + esc(last.number
-      ? 'Sin partido en esta jornada: ' + last.waiting.join(', ') + '. Descansan o falta meterlo.'
-      : '⚠️ Sin resultado esta jornada: ' + last.waiting.join(', ') + '. Quizá aún no se ha jugado o descansan.') + '</div></div>';
-  }
-  h += '<div class="card">';
+  const numbers = roundNumbers();
+  const played = leaguePlayedRounds();
+  // The jornada on screen: the one picked, else the last one played; 0 is "Todas".
+  const picked = S.leagueRound === 0 || numbers.includes(S.leagueRound) ? S.leagueRound : null;
+  const chosen = picked !== null && picked !== undefined ? picked : (last ? last.number : null);
+  const shown = chosen === 0 ? null : chosen ? leagueRound(chosen) : last;
   const own = clubId();
-  inRound.concat(S.allResults ? older : []).forEach(g => {
+  const gkey = g => [g.date, g.homeId, g.awayId, g.resultId].join('|');
+  const line = g => {
     const score = '<span' + (g.homeId === own || g.awayId === own ? ' class="bold"' : '') + '>' + esc(g.home + ' ' + g.homeGoals + ' – ' + g.awayGoals + ' ' + g.away) + '</span>';
     const n = /^\d+$/.test(String(g.round || '').trim()) ? Number(g.round) : null;
     const ours = g.homeId === own || g.awayId === own;
     const body = '<span class="grow"><span class="small">' + esc([n ? 'J' + n : '', fdate(g.date), ours ? 'nuestro' : ''].filter(Boolean).join(' · ')) + '</span><br>' + score + '</span>';
     // A numbered match opens its jornada; an old typed-in one its own form. Only the directiva, in the active season.
-    h += edit && n ? '<div class="line tap edit" data-act="editRound" data-n="' + n + '">' + body + '<span class="pen" aria-label="Corregir">✏️</span></div>'
+    return edit && n ? '<div class="line tap edit" data-act="editRound" data-n="' + n + '">' + body + '<span class="pen" aria-label="Corregir">✏️</span></div>'
       : edit && g.resultId ? '<div class="line tap edit" data-act="editResult" data-id="' + esc(g.resultId) + '">' + body + '<span class="pen" aria-label="Corregir">✏️</span></div>'
         : '<div class="line">' + body + '</div>';
-  });
-  h += '</div>';
-  if (older.length) h += '<button class="btn wide" data-act="allResults">' + (S.allResults ? 'Ver solo la última jornada ▴' : 'Ver todos los resultados (' + older.length + ' más) ▾') + '</button>';
+  };
+  const span = r => (r && r.from ? (r.from === r.to ? fdate(r.from) : 'Del ' + fdate(r.from) + ' al ' + fdate(r.to)) : '');
+  const picker = numbers.length
+    ? '<select class="roundpick" data-chg="leagueRound" aria-label="Jornada"><option value="0"' + (chosen === 0 ? ' selected' : '') + '>Todas las jornadas</option>'
+      + numbers.slice().sort((a, b) => b - a).map(n => '<option value="' + n + '"' + (chosen === n ? ' selected' : '') + '>Jornada ' + n + (played.includes(n) ? '' : ' · por jugar') + '</option>').join('') + '</select>'
+    : '<h2>Última jornada</h2>';
+  h += '<div class="row between">' + picker
+    + (edit && shown && shown.number ? '<button class="btn sm" data-act="editRound" data-n="' + shown.number + '">Editar</button>' : '') + '</div>'
+    + (shown && span(shown) ? '<div class="small">' + esc(span(shown)) + '</div>' : '');
+  if (shown) {
+    shown.pending.forEach(g => {
+      h += '<div class="card todo"><div class="small">' + esc((g.date ? fdate(g.date) : 'Fecha por confirmar') + (g.ours ? ' · nuestro partido' : '')) + '</div>'
+        + '<div' + (g.ours ? ' class="bold"' : '') + '>' + esc(g.home + ' – ' + g.away) + '</div>'
+        + '<div class="small">' + (g.date && g.date > today() ? 'Por jugar' : '⚠️ Sin resultado: quizá aún no se ha jugado.') + '</div></div>';
+    });
+    if (shown.waiting.length) {
+      h += '<div class="card todo"><div class="small">' + esc(shown.number
+        ? 'Sin partido en esta jornada: ' + shown.waiting.join(', ') + '. Descansan o falta meterlo.'
+        : '⚠️ Sin resultado esta jornada: ' + shown.waiting.join(', ') + '. Quizá aún no se ha jugado o descansan.') + '</div></div>';
+    }
+    // Results typed before jornadas had numbers: only by week, the rest on demand.
+    const older = shown.number ? [] : games.filter(g => !shown.games.some(r => gkey(r) === gkey(g)));
+    if (shown.games.length || (S.allResults && older.length)) h += '<div class="card">' + shown.games.concat(S.allResults ? older : []).map(line).join('') + '</div>';
+    if (older.length) h += '<button class="btn wide" data-act="allResults">' + (S.allResults ? 'Ver solo la última jornada ▴' : 'Ver todos los resultados (' + older.length + ' más) ▾') + '</button>';
+  } else {
+    // "Todas": every jornada with a result, newest first; then any result with no jornada.
+    played.forEach(n => {
+      const r = leagueRound(n);
+      h += '<div class="row between mt"><span class="bold">Jornada ' + n + '</span><span class="small">' + esc(span(r)) + '</span></div>'
+        + '<div class="card">' + r.games.map(line).join('') + '</div>';
+    });
+    const loose = games.filter(g => !/^\d+$/.test(String(g.round || '').trim()));
+    if (loose.length) h += '<div class="bold mt">Sin jornada</div><div class="card">' + loose.map(line).join('') + '</div>';
+  }
   return h;
 }
 
