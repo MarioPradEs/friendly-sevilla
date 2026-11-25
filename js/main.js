@@ -1,6 +1,7 @@
 'use strict';
 /** What each version brought, newest first, for the directiva. Add a line here with every change. */
 const CHANGELOG = [
+  ["0.29.2", "25/11/2026", ["Convocatoria: el dorsal de cada jugador al lado de su nombre"]],
   ["0.29.1", "25/11/2026", ["Clasificación: elige la jornada que quieres ver, o todas de la más reciente a la más antigua", "Las jornadas por jugar enseñan sus partidos y fechas"]],
   ["0.29.0", "25/11/2026", ["Jornadas: los 6 partidos de cada jornada, el nuestro también, con su fecha y sus goles", "Nuestro partido de la jornada sale en Días para la convocatoria, la lista y el acta", "Clasificación por jornada: la última jugada, con aviso de los partidos sin resultado", "El calendario oficial numera las jornadas"]],
   ["0.28.2", "25/11/2026", ["Clasificación: resultados de toda la jornada de una vez", "Voy / Tarde / No voy sin color hasta que eliges uno", "Buscador: la ficha ya no se vuelve a abrir al cambiar de sección", "Inicio: solo el próximo partido y el próximo entreno, el resto con «Ver más»", "Clasificación: solo la última jornada y aviso de los que no tienen resultado"]],

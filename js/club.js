@@ -305,7 +305,8 @@ function partSquad(d) {
   squadPlayers().forEach(p => {
     const on = sq.includes(p['ID']);
     const n = noticeOf(d.id, p['ID']);
-    h += '<div class="player row between nowrap"><div class="grow"><div class="name">' + esc(p['Nombre']) + '</div>' + (n ? '<div class="small notice">' + esc(noticeText(n, markOf(d.id, p['ID']))) + '</div>' : '') + '</div>'
+    // The shirt number first, in a circle, so the call-up reads like a team sheet.
+    h += '<div class="player row between nowrap"><span class="dorsal">' + esc(String(p['Dorsal'] || '').trim()) + '</span><div class="grow"><div class="name">' + esc(p['Nombre']) + '</div>' + (n ? '<div class="small notice">' + esc(noticeText(n, markOf(d.id, p['ID']))) + '</div>' : '') + '</div>'
       + '<button class="btn' + (on ? ' on' : '') + '" data-act="callUp" data-pid="' + esc(p['ID']) + '" data-day="' + esc(d.id) + '"' + (editing && (on || !full) ? '' : ' disabled') + '>' + (on ? 'Convocado' : 'No convocado') + '</button>'
       + (canNotice ? '<button class="box more" data-act="markMenu" data-pid="' + esc(p['ID']) + '" data-day="' + esc(d.id) + '" aria-label="Más">⋯</button>' : '') + '</div>';
   });
