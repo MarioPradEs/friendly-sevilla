@@ -29,7 +29,12 @@ function viewHome() {
   const rest = upcoming.filter(d => d !== nextMatch && d !== toAnswer);
   if (rest.length) h += '<h2>Próximos días</h2>';
   if (!upcoming.length) h += '<p class="small">No hay nada apuntado todavía.</p>';
-  rest.forEach(d => { h += dayCard(d, me, meCoach, false); });
+  const fold = splitUpcoming(rest, [nextMatch, toAnswer].filter(Boolean));
+  fold.shown.forEach(d => { h += dayCard(d, me, meCoach, false); });
+  if (fold.folded.length) {
+    h += '<button class="btn wide mt" data-act="foldDays">' + (S.allDays ? 'Ocultar los demás días ▴' : 'Ver ' + fold.folded.length + ' días más ▾') + '</button>';
+    if (S.allDays) fold.folded.forEach(d => { h += dayCard(d, me, meCoach, false); });
+  }
   const played = all.filter(d => d.match && d.date < t && d.gf !== '').sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
   if (played.length) {
     h += '<h2>Últimos resultados</h2>';
@@ -91,8 +96,7 @@ function dayCard(d, me, meCoach, hero) {
     // One row, the main answer first; the chosen one is filled, and tapping it again takes it back.
     h += '<div class="answer">' + ANSWERS.map(a => {
       const chosen = !!n && n['Tipo'] === a[0];
-      const main = chosen || (!n && a[0] === 'Asistiré');
-      return '<button class="btn' + (main ? ' primary' : '') + '" data-act="' + (chosen ? 'unwarn' : 'warn') + '" data-type="' + esc(a[0]) + '" data-day="' + esc(d.id) + '" data-pid="' + esc(me) + '">'
+      return '<button class="btn' + (chosen ? ' primary' : '') + '" data-act="' + (chosen ? 'unwarn' : 'warn') + '" data-type="' + esc(a[0]) + '" data-day="' + esc(d.id) + '" data-pid="' + esc(me) + '">'
         + (chosen ? '✓ ' : '') + a[1] + '</button>';
     }).join('') + '</div>';
   }
@@ -566,6 +570,44 @@ function leagueMissing() {
   return days().filter(d => d.match && !d.off && d.session === 'Partido' && d.date < t && d.title.trim() && !(isWhole(d.gf) && isWhole(d.ga)))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
+/**
+ * Inicio shows only the next training and the next match; the rest stays folded behind "Ver más".
+ * [above] is what Inicio already shows on top. Same rule as the app's UpcomingPlan.
+ */
+function splitUpcoming(rest, above) {
+  const training = above.some(d => !d.match) ? null : rest.find(d => !d.match);
+  const match = above.some(d => d.match) ? null : rest.find(d => d.match);
+  const shown = rest.filter(d => d === training || d === match);
+  return { shown: shown, folded: rest.filter(d => !shown.includes(d)) };
+}
+
+/**
+ * The last round played: the week (Monday to Sunday) of the latest league date up to today, its
+ * results, our matches that week with no score, and the teams with no result (maybe not played yet).
+ */
+function leagueLastRound() {
+  const t = today();
+  const ourAll = days().filter(d => d.match && !d.off && d.session === 'Partido' && d.title.trim());
+  const ourDays = ourAll.filter(d => d.date <= t);
+  const all = leagueGames().filter(g => g.date <= t);
+  const latest = all.map(g => g.date).concat(ourDays.map(d => d.date)).sort().pop();
+  if (!latest) return null;
+  const day = new Date(latest + 'T12:00:00');
+  const monday = new Date(day); monday.setDate(day.getDate() - ((day.getDay() + 6) % 7));
+  const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
+  const iso = x => x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
+  const from = iso(monday), to = iso(sunday);
+  const inWeek = date => date >= from && date <= to;
+  const games = all.filter(g => inWeek(g.date));
+  // Ours later that same week count too: not played yet, so no score.
+  const unscored = ourAll.filter(d => inWeek(d.date) && !(isWhole(d.gf) && isWhole(d.ga))).sort((a, b) => a.date.localeCompare(b.date));
+  const busy = new Set(games.flatMap(g => [g.homeId, g.awayId]));
+  if (unscored.length) busy.add(clubId());
+  unscored.forEach(d => { const r = rivals().find(x => x.name.toLowerCase() === d.title.trim().toLowerCase()); if (r) busy.add(r.id); });
+  const everyone = [{ id: clubId(), name: TEAM }].concat(rivals());
+  return { from: from, to: to, games: games, unscored: unscored, waiting: everyone.filter(x => !busy.has(x.id)).map(x => x.name) };
+}
+
 /** Everyone who has played, best first: points (3 a win, 1 a draw), goal difference, goals scored, then name. */
 function leagueTable() {
   const own = clubId();
@@ -594,7 +636,7 @@ function viewLeague() {
   const games = leagueGames();
   const edit = can.league();
   let h = can.club() ? seasonBar() : '';
-  if (edit) h += '<div class="row"><button class="btn primary wide" data-act="addResult"' + (rivals().length >= 2 ? '' : ' disabled') + '>+ Resultado</button></div>';
+  if (edit) h += '<div class="row"><button class="btn primary wide" data-act="addRound"' + (rivals().length >= 2 ? '' : ' disabled') + '>+ Resultados de la jornada</button></div>';
   const missing = leagueMissing();
   if (missing.length) {
     // Whoever fills in the report can go straight to the match; the rest just see which ones.
@@ -611,9 +653,19 @@ function viewLeague() {
     + table.map((r, i) => '<tr' + (r.own ? ' class="own"' : '') + '><td>' + (i + 1) + '</td><td class="team">' + esc(r.name) + '</td>'
       + [r.played, r.won, r.drawn, r.lost, r.goalsFor, r.goalsAgainst, r.goalDiff > 0 ? '+' + r.goalDiff : r.goalDiff].map(c => '<td>' + c + '</td>').join('')
       + '<td class="bold">' + r.points + '</td></tr>').join('') + '</tbody></table></div>';
-  h += '<h2>Últimos resultados</h2><div class="card">';
+  const last = leagueLastRound();
+  const inRound = last ? last.games : [];
+  const gkey = g => [g.date, g.homeId, g.awayId, g.resultId].join('|');
+  const older = games.filter(g => !inRound.some(r => gkey(r) === gkey(g)));
+  h += '<h2>Última jornada</h2>' + (last ? '<div class="small">Del ' + esc(fdate(last.from)) + ' al ' + esc(fdate(last.to)) + '</div>' : '');
+  if (last) last.unscored.forEach(d => {
+    h += '<div class="card todo"><div class="small">' + esc(fdate(d.date)) + ' · nuestro partido</div><div class="bold">' + esc(TEAM + ' – ' + d.title.trim()) + '</div>'
+      + '<div class="small">⚠️ Sin resultado: quizá aún no se ha jugado. Se pone en el acta.</div></div>';
+  });
+  if (last && last.waiting.length) h += '<div class="card todo"><div class="small">⚠️ Sin resultado esta jornada: ' + esc(last.waiting.join(', ')) + '. Quizá aún no se ha jugado o descansan.</div></div>';
+  h += '<div class="card">';
   const own = clubId();
-  games.forEach(g => {
+  inRound.concat(S.allResults ? older : []).forEach(g => {
     const score = '<span' + (g.homeId === own || g.awayId === own ? ' class="bold"' : '') + '>' + esc(g.home + ' ' + g.homeGoals + ' – ' + g.awayGoals + ' ' + g.away) + '</span>';
     const body = '<span class="grow"><span class="small">' + esc(fdate(g.date)) + '</span><br>' + score + '</span>';
     // Only typed-in results can be corrected, and only by the directiva in the active season.
@@ -621,7 +673,77 @@ function viewLeague() {
       ? '<div class="line tap edit" data-act="editResult" data-id="' + esc(g.resultId) + '">' + body + '<span class="pen" aria-label="Corregir">✏️</span></div>'
       : '<div class="line">' + body + '</div>';
   });
-  return h + '</div>';
+  h += '</div>';
+  if (older.length) h += '<button class="btn wide" data-act="allResults">' + (S.allResults ? 'Ver solo la última jornada ▴' : 'Ver todos los resultados (' + older.length + ' más) ▾') + '</button>';
+  return h;
+}
+
+/** Matches in a round besides ours: everyone plays once, so 12 teams make 6, 5 to type in. */
+const roundSize = () => Math.max(1, Math.floor((rivals().length + 1) / 2) - 1);
+
+/** Same rule as the app: at least one full match, none half filled, no team twice. */
+function roundReady(games) {
+  const full = games.filter(g => g.home && g.away);
+  if (!full.length || games.some(g => !!g.home !== !!g.away)) return false;
+  const ids = full.flatMap(g => [g.home, g.away]);
+  return new Set(ids).size === ids.length;
+}
+
+/**
+ * A whole round at once: one date and a row per match, home on the left and away on the right,
+ * each with its goals underneath. A team picked in another row is not offered again.
+ */
+function roundDialog() {
+  if (!can.league()) return;
+  const teams = rivals().slice().sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+  let date = today();
+  const games = Array.from({ length: roundSize() }, () => ({ home: '', away: '', hg: 0, ag: 0 }));
+  const read = () => {
+    date = $('rdDate').value || date;
+    games.forEach((g, i) => { g.home = $('rdH' + i).value; g.away = $('rdA' + i).value; if (g.home === g.away) g.away = ''; });
+  };
+  const pick = (sid, i, sel, other) => {
+    const taken = new Set(games.flatMap((g, j) => j === i ? [] : [g.home, g.away]));
+    return '<select id="' + sid + '" class="full"><option value="">Equipo</option>'
+      + teams.filter(t => t.id === sel || (!taken.has(t.id) && t.id !== other))
+        .map(t => '<option value="' + esc(t.id) + '"' + (t.id === sel ? ' selected' : '') + '>' + esc(t.name) + '</option>').join('') + '</select>';
+  };
+  const step = (i, side) => {
+    const v = games[i][side];
+    return '<div class="row center"><button type="button" class="btn sm" data-rg="' + i + '" data-side="' + side + '" data-step="-1"' + (v > 0 ? '' : ' disabled') + '>−</button>'
+      + '<span class="title">' + v + '</span><button type="button" class="btn sm" data-rg="' + i + '" data-side="' + side + '" data-step="1">+</button></div>';
+  };
+  const draw = () => {
+    const ready = roundReady(games);
+    const started = games.some(g => g.home || g.away);
+    return '<form method="dialog"><div class="title">Resultados de la jornada</div>'
+      + '<label for="rdDate">Fecha</label><input id="rdDate" type="date" value="' + esc(date) + '">'
+      + '<div class="small">Nuestro partido no va aquí: sale del acta. Deja vacíos los que aún no sepas.</div>'
+      + games.map((g, i) => '<div class="card round"><div class="small">Partido ' + (i + 1) + '</div>'
+        + '<div class="pair"><div><label for="rdH' + i + '">Local</label>' + pick('rdH' + i, i, g.home, g.away) + step(i, 'hg') + '</div>'
+        + '<div class="dash"></div>'
+        + '<div><label for="rdA' + i + '">Visitante</label>' + pick('rdA' + i, i, g.away, g.home) + step(i, 'ag') + '</div></div></div>').join('')
+      + '<button type="button" class="btn wide" data-rg="more">+ Otro partido</button>'
+      + (!ready && started ? '<div class="small warn">Cada partido necesita los dos equipos, y un equipo no puede jugar dos veces.</div>' : '')
+      + '<div class="row end"><button type="button" class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok"' + (ready ? '' : ' disabled') + '>Guardar</button></div></form>';
+  };
+  openDialog(draw(), dlg => {
+    dlg.onclick = e => {
+      const b = e.target.closest('[data-rg]');
+      if (!b) return;
+      read();
+      if (b.dataset.rg === 'more') games.push({ home: '', away: '', hg: 0, ag: 0 });
+      else { const g = games[Number(b.dataset.rg)]; g[b.dataset.side] = Math.max(0, g[b.dataset.side] + Number(b.dataset.step)); }
+      dlg.innerHTML = draw();
+    };
+    // Picking a team redraws: the other lists leave it out, and Guardar needs full matches.
+    dlg.onchange = e => { if (!e.target || e.target.tagName !== 'SELECT') return; read(); dlg.innerHTML = draw(); };
+  }, () => {
+    read();
+    if (!roundReady(games)) { toast('Cada partido necesita dos equipos distintos'); return false; }
+    send(games.filter(g => g.home && g.away).map(g => ({ t: 'Resultados liga', op: 'u', v: { 'ID': uid(), 'Fecha': date, 'Local ID': g.home, 'Visitante ID': g.away,
+      'Goles local': String(g.hg), 'Goles visitante': String(g.ag), 'Temporada': activeSeason() } })));
+  });
 }
 
 /** Typing in or correcting a result between two other teams. Nothing is saved until "Guardar". */

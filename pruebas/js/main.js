@@ -1,6 +1,7 @@
 'use strict';
 /** What each version brought, newest first, for the directiva. Add a line here with every change. */
 const CHANGELOG = [
+  ["0.28.2", "25/11/2026", ["Clasificación: resultados de toda la jornada de una vez", "Voy / Tarde / No voy sin color hasta que eliges uno", "Buscador: la ficha ya no se vuelve a abrir al cambiar de sección", "Inicio: solo el próximo partido y el próximo entreno, el resto con «Ver más»", "Clasificación: solo la última jornada y aviso de los que no tienen resultado"]],
   ["0.28.1", "24/11/2026", ["Gastos: categoría Entrenador y lo pagado al entrenador en Cuentas", "Inicio: próximo partido arriba, luego tus estadísticas y los pendientes en naranja"]],
   ["0.28.0", "24/11/2026", ["Calendario de liga con ida y vuelta", "Aplazar partidos y suspender entrenos", "Al cambiar la fecha, borrar respuestas y avisar al grupo", "Buscador para la directiva y el entrenador", "Versiones de prueba (solo directiva)"]],
   ["0.27.1", "24/11/2026", ["Clasificación: aviso de los partidos de liga jugados a los que les falta el resultado"]],
@@ -146,6 +147,9 @@ const ACT = {
   sub: ds => { S.sub = ds.sub; render(); },
   homeTab: ds => { S.homeTab = ds.sub; render(); window.scrollTo(0, 0); },
   addResult: () => resultDialog(''),
+  addRound: () => roundDialog(),
+  foldDays: () => { S.allDays = !S.allDays; render(); },
+  allResults: () => { S.allResults = !S.allResults; render(); },
   editResult: ds => resultDialog(ds.id),
   warn: ds => warnDialog(ds.day, ds.type, ds.pid),
   // Tapping the chosen answer again takes it back: the line under the buttons says so.
