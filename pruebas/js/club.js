@@ -12,7 +12,7 @@ function viewDays() {
   // A past season has nothing coming: its days show open.
   const pastOpen = S.showPast || !coming.length;
   // Who only takes attendance works on the active season and nothing else.
-  let h = ROLE() === 'Lista' ? '<h2>Pasar lista</h2>' : seasonBar();
+  let h = !can.club() ? '<h2>Pasar lista</h2>' : seasonBar();
   if (can.editDays()) h += '<div class="row"><button class="btn primary wide" data-act="addDay">+ Añadir día</button></div>';
   if (!all.length) {
     h += '<p class="small">' + (editable() ? 'Añade un día de entrenamiento, partido, amistoso o torneo. Puedes prepararlo antes: nadie sale marcado hasta que lo marques ese mismo día.' : 'No hay días en esta temporada.') + '</p>';
@@ -96,7 +96,7 @@ function addDay() {
 
 function viewDay(d) {
   const coming = d.date >= today();
-  if (ROLE() === 'Lista') {
+  if (!can.club()) {
     // Like a player, plus the list: the day as it is, nothing of it to change.
     return '<button class="link" data-act="closeDay">‹ Volver</button><div class="card"><div class="title">' + esc(dayTitle(d)) + '</div><div class="small">'
       + esc([fdate(d.date), d.time ? 'a las ' + d.time : '', d.side].filter(Boolean).join(' · ')) + '</div>'
@@ -259,7 +259,7 @@ function whoButton(d) {
  * apart, they are not players. Once the deadline passes, those still silent show as a warning.
  */
 function whoComes(d) {
-  if (!['Directiva', 'Entrenador', 'Lista'].includes(ROLE())) return '';
+  if (!can.seeAll()) return '';
   const w = whoCounts(d);
   const name = p => p['Nombre'] + (isKeeper(p) ? ' (portero)' : '');
   const overdue = deadlinePassed(d) && w.silent.length > 0;
@@ -406,6 +406,12 @@ function partList(d) {
     }
     h += '</div>';
   });
+  // The day's truce: late arrivals are marked, but not fined. Whoever puts fines turns it on and off.
+  if (d.truce || (editable() && has('Poner multas'))) {
+    h += '<div class="row between mt"><div><div class="bold">🕊️ Tregua: sin multa por llegar tarde</div><div class="small">'
+      + (d.truce ? 'Hoy el retraso se apunta, pero no se multa.' : 'Actívala para no multar los retrasos de este día.') + '</div></div>'
+      + (editable() && has('Poner multas') ? '<label class="check"><input type="checkbox" data-chg="truce" data-day="' + esc(d.id) + '"' + (d.truce ? ' checked' : '') + '></label>' : '') + '</div>';
+  }
   if (marking && can.fine()) {
     const toFine = finesToApply(d);
     h += '<div class="row mt"><button class="btn primary wide" data-act="applyFines" data-day="' + esc(d.id) + '"' + (toFine.length ? '' : ' disabled') + '>'
@@ -532,7 +538,8 @@ function finesToApply(d) {
   calledUp(d).forEach(pid => {
     const m = markOf(d.id, pid);
     if (!m) return;
-    if (late && m['Estado'] === 'Tarde' && !isTrue(m['Justificada']) && !warnedInTime(d, noticeOf(d.id, pid))) out.push({ pid: pid, rule: late });
+    // On a truce day the late mark stays, but is not fined.
+    if (late && !d.truce && m['Estado'] === 'Tarde' && !isTrue(m['Justificada']) && !warnedInTime(d, noticeOf(d.id, pid))) out.push({ pid: pid, rule: late });
     if (kit && came(m) && isTrue(m['Equipación incorrecta'])) out.push({ pid: pid, rule: kit });
   });
   return out.filter(x => !fined.has(x.pid + '|' + x.rule.label));
@@ -586,7 +593,7 @@ function partReport(d) {
   if (editing) h += '<div class="row mt"><button class="btn" data-act="addKeeper" data-kind="keeper" data-day="' + esc(d.id) + '">+ Portero</button><button class="btn" data-act="addKeeper" data-kind="against" data-day="' + esc(d.id) + '">+ Gol en contra</button></div>';
   const mvp = (events.find(e => e['Tipo'] === 'MVP') || {})['Jugador ID'];
   const votes = rows('Votos MVP').filter(v => v['Partido ID'] === d.id);
-  if (ROLE() === 'Directiva' && (votes.length || voteOpen(d))) {
+  if (can.votes() && (votes.length || voteOpen(d))) {
     const count = {};
     votes.forEach(v => { count[v['Votado ID']] = (count[v['Votado ID']] || 0) + 1; });
     // The three most voted, then who voted whom: the votes guide, the directiva picks the MVP.
@@ -597,7 +604,7 @@ function partReport(d) {
       + top.map((id, i) => '<div class="bold">' + (i + 1) + '. ' + esc(playerName(id)) + ' · ' + count[id] + (count[id] === 1 ? ' voto' : ' votos') + '</div>').join('')
       + votes.map(v => '<div class="small">' + esc(playerName(v['Jugador ID']) + ' → ' + playerName(v['Votado ID'])) + '</div>').join('');
   }
-  h += '<h2>Mejor jugador (MVP)</h2><div class="chips">' + sq.map(p => '<button class="btn' + (mvp === p['ID'] ? ' on' : '') + '" data-act="mvp" data-pid="' + esc(p['ID']) + '" data-day="' + esc(d.id) + '"' + (editing ? '' : ' disabled') + '>' + esc(p['Nombre']) + '</button>').join('') + '</div>';
+  h += '<h2>Mejor jugador (MVP)</h2><div class="chips">' + sq.map(p => '<button class="btn' + (mvp === p['ID'] ? ' on' : '') + '" data-act="mvp" data-pid="' + esc(p['ID']) + '" data-day="' + esc(d.id) + '"' + (can.mvp() ? '' : ' disabled') + '>' + esc(p['Nombre']) + '</button>').join('') + '</div>';
   // Who led and the coach's notes go last: written once, rarely changed.
   return h + '<hr>' + benchPart(d, sq) + coachNotePart(d);
 }
@@ -642,7 +649,7 @@ function toggleActa(dayId, type, pid) {
   send({ t: 'Acta', op: 'u', v: { 'ID': uid(), 'Partido ID': dayId, 'Tipo': type, 'Jugador ID': pid, 'Minuto': '', 'Asistencia ID': '', 'Temporada': d.season || activeSeason() } });
 }
 /** The coach's own note on the match: only the coach and the directiva see it (the sheet strips it for the rest too). */
-const seesCoachNote = () => ['Directiva', 'Entrenador'].includes(ROLE());
+const seesCoachNote = () => has('Acta');
 const coachNote = dayId => (seesCoachNote() ? actaOf(dayId, 'Nota entrenador')[0] : null);
 function coachNotePart(d) {
   if (!seesCoachNote()) return '';
@@ -1088,11 +1095,11 @@ function viewSquad() {
         const before = acc.fines.filter(f => earlier(seasonOf(f.row)));
         if (before.length) h += '<div class="bold mt">Multas de temporadas anteriores</div>';
         before.forEach(f => { h += moneyLine(f.label + ' · ' + fdate(f.date) + ' (' + shortSeason(f.season) + ')', f.amount, f.rest, can.collect() ? payButton('fine', f.id, pid) : ''); });
-        h += '<div class="row between mt"><span class="bold">Cuotas, equipación y ropa</span>' + (can.collect() ? '<button class="btn sm" data-act="addCharge" data-pid="' + esc(pid) + '">+ Cargo</button>' : '') + '</div>';
+        h += '<div class="row between mt"><span class="bold">Cuotas, equipación y ropa</span>' + (can.record() ? '<button class="btn sm" data-act="addCharge" data-pid="' + esc(pid) + '">+ Cargo</button>' : '') + '</div>';
         if (!acc.charges.length) h += '<div class="small">Nada cargado esta temporada.</div>';
         acc.charges.forEach(c => {
           const what = [c.category, c.concept].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).join(' · ') + (earlier(seasonOf({ 'Temporada': c.season })) ? ' (' + shortSeason(c.season) + ')' : '');
-          h += moneyLine(what, c.amount, c.rest, can.collect() && c.rest > 0 ? payButton('charge', c.id, pid) : '');
+          h += moneyLine(what, c.amount, c.rest, can.record() && c.rest > 0 ? payButton('charge', c.id, pid) : '');
         });
         if (acc.credit) h += '<div class="small paid bold mt">Saldo a favor: ' + money(acc.credit) + '</div>';
         h += '<div class="small bold mt">Total pendiente: ' + money(acc.total) + '</div>';
@@ -1209,7 +1216,7 @@ function viewAccounts() {
   const coachPaid = mov.filter(m => m['Tipo'] === 'Gasto' && m['Categoría'] === COACH_CATEGORY).reduce((s, m) => s + cents(m['Importe']), 0);
   let h = seasonBar() + '<div class="row between"><div><div class="title">Saldo: ' + money(sum('Ingreso') - sum('Gasto')) + '</div><div class="small">Ingresos ' + money(sum('Ingreso')) + ' · Gastos ' + money(sum('Gasto')) + '</div>'
     + (coachPaid ? '<div class="small bold">Pagado al entrenador: ' + money(coachPaid) + '</div>' : '') + '</div>'
-    + (editable() ? '<button class="btn primary" data-act="newMovement">+ Movimiento</button>' : '') + '</div>'
+    + (can.record() ? '<button class="btn primary" data-act="newMovement">+ Movimiento</button>' : '') + '</div>'
     + '<div class="chips">' + ['Movimientos', 'Por jugador'].map(v => '<button class="btn' + (view === v ? ' on' : '') + '" data-act="accView" data-view="' + v + '">' + v + '</button>').join('') + '</div>';
   if (view === 'Movimientos') {
     if (!mov.length) return h + '<p class="small">Aún no hay movimientos. Lo que se cobre (también a plazos) aparece aquí solo.</p>';
@@ -1386,21 +1393,23 @@ const searchNorm = text => String(text || '').toLowerCase().normalize('NFD').rep
  * it answers to. "go" is a tab (and a sub-tab), a day, a player, and something to start there.
  */
 function searchShortcuts() {
-  const directiva = ROLE() === 'Directiva', plays = !!(S.yo && S.yo.jugadorId), finesToo = can.fine();
+  const plays = !!(S.yo && S.yo.jugadorId), finesToo = can.fine(), seesFines = can.seeFines();
   const out = [];
   const add = (title, hint, go, words) => out.push({ title: title, hint: hint, go: go, words: words || '' });
   // The staff's league table lives in Yo.
   const league = { tab: 'yo', sub: 'liga' };
-  add('Añadir día', 'Entreno, partido, amistoso o torneo', { tab: 'dias', action: 'newDay' }, 'nuevo crear dia entreno entrenamiento partido evento');
-  add('Calendario de liga', 'Crear la ida y la vuelta', { tab: 'dias', action: 'calendar' }, 'jornadas ida vuelta temporada partidos liga');
-  add('Entrenos de la temporada', 'Crear todos los entrenamientos', { tab: 'dias', action: 'season' }, 'entrenamientos temporada crear');
+  if (can.editDays()) {
+    add('Añadir día', 'Entreno, partido, amistoso o torneo', { tab: 'dias', action: 'newDay' }, 'nuevo crear dia entreno entrenamiento partido evento');
+    add('Calendario de liga', 'Crear la ida y la vuelta', { tab: 'dias', action: 'calendar' }, 'jornadas ida vuelta temporada partidos liga');
+    add('Entrenos de la temporada', 'Crear todos los entrenamientos', { tab: 'dias', action: 'season' }, 'entrenamientos temporada crear');
+  }
   add('Clasificación', 'La tabla de la liga', league, 'tabla liga puntos');
-  if (directiva) add('Meter resultado de otro equipo', 'Para la clasificación', league, 'resultado liga clasificacion otros equipos');
+  if (has('Liga')) add('Meter resultado de otro equipo', 'Para la clasificación', league, 'resultado liga clasificacion otros equipos');
   if (finesToo) {
     add('Poner multa', 'Multas', { tab: 'multas', action: 'newFine' }, 'multa sancion nueva');
     add('Cobrar multas', 'Multas', { tab: 'multas' }, 'multas pagos pendientes deudas cobrar');
   }
-  if (directiva) {
+  if (can.record()) {
     add('Apuntar gasto o ingreso', 'Cuentas', { tab: 'cuentas', action: 'newMovement' }, 'movimiento gasto ingreso cuentas dinero contabilidad cuota');
     add('Resumen del dinero', 'Cuentas', { tab: 'cuentas' }, 'resumen dinero caja saldo');
   }
@@ -1423,7 +1432,7 @@ function searchShortcuts() {
   players().forEach(p => {
     const extra = [p['Apodo'], p['Dorsal']].filter(x => String(x || '').trim()).join(' ');
     add('Ficha de ' + p['Nombre'], 'Plantilla', { tab: 'plantilla', pid: p['ID'] }, 'jugador ficha ' + extra);
-    if (finesToo) add('Multas de ' + p['Nombre'], 'Multas', { tab: 'multas', pid: p['ID'] }, 'multas pagos deuda ' + extra);
+    if (seesFines) add('Multas de ' + p['Nombre'], 'Multas', { tab: 'multas', pid: p['ID'] }, 'multas pagos deuda ' + extra);
   });
   return out;
 }
@@ -1488,5 +1497,5 @@ function goTo(go) {
   else if (go.action === 'calendar' && can.editDays() && rivals().length) leagueCalendarDialog();
   else if (go.action === 'season' && can.editDays()) seasonTrainingsDialog();
   else if (go.action === 'newFine' && can.fine()) newFineDialog();
-  else if (go.action === 'newMovement' && editable()) movementDialog();
+  else if (go.action === 'newMovement' && can.record()) movementDialog();
 }

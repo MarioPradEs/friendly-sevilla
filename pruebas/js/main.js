@@ -1,6 +1,7 @@
 'use strict';
 /** What each version brought, newest first, for the directiva. Add a line here with every change. */
 const CHANGELOG = [
+  ["0.30.0", "26/11/2026", ["Permisos por casillas: cada persona tiene solo lo que se le marca (pasar lista, convocar, acta, multas, cuentas…), con lo que da cada una", "App: panel Accesos (Ajustes): activar cuentas, enlazarlas con su jugador y dar o quitar permisos", "Inicio: lo pendiente en rojo arriba y con número en la pestaña", "Inicio: solo el siguiente entreno y el último resultado; el resto, plegado", "Seguridad: lo escrito que parezca una fórmula se guarda como texto", "Tregua por día: el retraso se apunta pero no se multa (quien pone multas la activa en la lista)"]],
   ["0.29.3", "25/11/2026", ["App: Modo developer (solo Mario): ver la app como directiva, entrenador, lista, jugador o portero"]],
   ["0.29.2", "25/11/2026", ["Convocatoria: el dorsal de cada jugador al lado de su nombre"]],
   ["0.29.1", "25/11/2026", ["Clasificación: elige la jornada que quieres ver, o todas de la más reciente a la más antigua", "Las jornadas por jugar enseñan sus partidos y fechas"]],
@@ -36,11 +37,16 @@ const CHANGELOG = [
 const PORTAL = { inicio: viewHome, liga: viewLeague, pagos: viewMoney, perfil: viewProfile };
 
 function tabsFor() {
-  const r = ROLE();
-  if (r === 'Directiva') return [['dias', '📅', 'Días'], ['multas', '⚠', 'Multas'], ['plantilla', '👥', 'Plantilla'], ['resumen', '📊', 'Resumen'], ['cuentas', '€', 'Cuentas'], ['yo', '☺', 'Yo']];
-  if (r === 'Entrenador') return [['dias', '📅', 'Días'], ['multas', '⚠', 'Multas'], ['plantilla', '👥', 'Plantilla'], ['resumen', '📊', 'Resumen'], ['yo', '☺', 'Yo']];
+  if (can.club()) {
+    const t = [['dias', '📅', 'Días']];
+    if (can.seeFines()) t.push(['multas', '⚠', 'Multas']);
+    t.push(['plantilla', '👥', 'Plantilla'], ['resumen', '📊', 'Resumen']);
+    if (can.accounts()) t.push(['cuentas', '€', 'Cuentas']);
+    t.push(['yo', '☺', 'Yo']);
+    return t;
+  }
   const t = [['inicio', '⌂', 'Inicio'], ['pagos', '€', 'Pagos'], ['perfil', '☺', 'Mi perfil']];
-  if (r === 'Lista') t.push(['dias', '✓', 'Lista']);
+  if (has('Pasar lista')) t.push(['dias', '✓', 'Lista']);
   return t;
 }
 
@@ -77,7 +83,7 @@ function render() {
   } else if (S.tab === 'yo') {
     S.sub = S.sub || 'inicio';
     // The staff's home lives here, so the league table sits next to it.
-    h = '<div class="chips">' + [['inicio', 'Inicio'], ['liga', 'Clasificación'], ['pagos', ROLE() === 'Entrenador' ? 'Mis multas' : 'Mis pagos'], ['perfil', 'Mi perfil']].map(x => '<button class="btn' + (S.sub === x[0] ? ' on' : '') + '" data-act="sub" data-sub="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>'
+    h = '<div class="chips">' + [['inicio', 'Inicio' + pendingBadge()], ['liga', 'Clasificación'], ['pagos', ROLE() === 'Entrenador' ? 'Mis multas' : 'Mis pagos'], ['perfil', 'Mi perfil']].map(x => '<button class="btn' + (S.sub === x[0] ? ' on' : '') + '" data-act="sub" data-sub="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>'
       + androidLink() + PORTAL[S.sub]();
   } else {
     h = ({ inicio: viewInicio, pagos: viewMoney, perfil: viewProfile, multas: viewFines, plantilla: viewSquad, resumen: viewSummary, cuentas: viewAccounts }[S.tab] || viewHome)();
@@ -154,6 +160,9 @@ const ACT = {
   addRound: () => roundDialog(),
   editRound: ds => roundDialog(Number(ds.n)),
   foldDays: () => { S.allDays = !S.allDays; render(); },
+  foldResults: () => { S.allHomeResults = !S.allHomeResults; render(); },
+  // A pending line: bring its day into view.
+  goTo: ds => { const at = document.getElementById(ds.go); if (at && at.scrollIntoView) at.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
   allResults: () => { S.allResults = !S.allResults; render(); },
   editResult: ds => resultDialog(ds.id),
   warn: ds => warnDialog(ds.day, ds.type, ds.pid),
@@ -245,6 +254,8 @@ const CHG = {
   led: el => { el.blur(); toggleActa(el.dataset.day, 'Dirigió', el.dataset.pid); },
   bench: el => { el.blur(); toggleActa(el.dataset.day, 'Banquillo', el.dataset.pid); },
   result: el => setResult(el.dataset.day),
+  // The day's truce on or off.
+  truce: el => { const d = findDay(el.dataset.day); if (d) send({ t: d.match ? 'Partidos' : 'Entrenamientos', op: 'e', v: { 'ID': d.id, 'Sin multa tarde': el.checked ? 'true' : 'false' } }); },
   absReason: el => { el.blur(); toggleReason(el.dataset.day, el.dataset.pid, el.value); },
   finePaid: el => toggleFinePaid(el.dataset.id, el.checked),
   season: el => { S.viewSeason = el.value === activeSeason() ? '' : el.value; S.day = null; S.open = null; render(); },
@@ -303,7 +314,7 @@ async function onGoogle(resp) {
       return;
     }
     S.token = a.token;
-    S.yo = { email: a.email, nombre: a.nombre, rol: a.rol, jugadorId: a.jugadorId };
+    S.yo = { email: a.email, nombre: a.nombre, rol: a.rol, jugadorId: a.jugadorId, permisos: a.permisos };
     store.set('token', S.token); store.set('yo', S.yo);
     // Changes kept from an expired session only go up for the same account.
     const owner = store.get('queueOwner', null);

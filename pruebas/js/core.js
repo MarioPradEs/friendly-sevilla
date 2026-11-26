@@ -77,24 +77,46 @@ function toast(text) {
   setTimeout(() => t.remove(), 2400);
 }
 
-// ---------- roles ----------
+// ---------- permissions ----------
+// Everyone is a player; each ticked permission in Usuarios adds something. The sheet checks the same.
+const PERMS_OF_ROLE = {
+  Directiva: ['Pasar lista', 'Calendario', 'Borrar días', 'Convocar', 'Acta', 'MVP y votos', 'Plantilla', 'Datos privados', 'Ver multas',
+    'Poner multas', 'Cobrar', 'Economía', 'Apuntar movimientos', 'Liga', 'Temporadas'],
+  Entrenador: ['Calendario', 'Convocar', 'Acta', 'Zona entrenador'],
+  Lista: ['Pasar lista'],
+  Jugador: [],
+};
+// A sheet without the checkboxes yet still sends the old role.
+const PERMS = () => (S.yo && (S.yo.permisos || PERMS_OF_ROLE[S.yo.rol])) || [];
+const has = p => PERMS().includes(p);
+// The old role closest to the permissions, only for labels.
 const ROLE = () => (S.yo && S.yo.rol) || '';
 const can = {
-  editDays: () => ['Directiva', 'Entrenador'].includes(ROLE()) && editable(),
-  deleteDays: () => ROLE() === 'Directiva' && editable(),
-  callUp: () => ['Directiva', 'Entrenador'].includes(ROLE()) && editable(),
-  report: () => ['Directiva', 'Entrenador'].includes(ROLE()) && editable(),
-  mark: () => ['Directiva', 'Lista'].includes(ROLE()) && editable(),
-  fine: () => ROLE() === 'Directiva' && editable(),
-  collect: () => ROLE() === 'Directiva' && editable(),
-  accounts: () => ROLE() === 'Directiva',
-  seasons: () => ROLE() === 'Directiva',
+  editDays: () => has('Calendario') && editable(),
+  deleteDays: () => has('Borrar días') && editable(),
+  callUp: () => has('Convocar') && editable(),
+  report: () => has('Acta') && editable(),
+  mark: () => has('Pasar lista') && editable(),
+  fine: () => has('Poner multas') && editable(),
+  collect: () => has('Cobrar') && editable(),
+  seeFines: () => has('Ver multas') || has('Poner multas') || has('Cobrar'),
+  accounts: () => has('Economía') || has('Apuntar movimientos'),
+  // Fees, payments of fees and other movements: only to see them is Economía.
+  record: () => has('Apuntar movimientos') && editable(),
+  seasons: () => has('Temporadas'),
   // Results between the other teams; ours come from the report.
-  league: () => ROLE() === 'Directiva' && editable(),
-  club: () => ['Directiva', 'Entrenador'].includes(ROLE()),
-  // Other people's answers ("Avisos"): the sheet lets the coach touch only his own.
-  clearAnswers: () => ROLE() === 'Directiva' && editable(),
-  search: () => ['Directiva', 'Entrenador'].includes(ROLE()),
+  league: () => has('Liga') && editable(),
+  squad: () => has('Plantilla'),
+  club: () => ['Calendario', 'Borrar días', 'Convocar', 'Acta', 'MVP y votos', 'Plantilla', 'Ver multas', 'Poner multas', 'Cobrar',
+    'Economía', 'Apuntar movimientos', 'Temporadas', 'Zona entrenador'].some(has),
+  // Everybody's answers and attendance: whoever takes attendance or calls up.
+  seeAll: () => has('Pasar lista') || has('Convocar'),
+  // Other people's answers ("Avisos"): only whoever takes attendance.
+  clearAnswers: () => has('Pasar lista') && editable(),
+  // Who voted whom and picking the MVP.
+  votes: () => has('MVP y votos'),
+  mvp: () => has('MVP y votos') && editable(),
+  search: () => can.club(),
 };
 
 // ---------- API ----------
@@ -201,7 +223,7 @@ function dayOf(r, match) {
   if (!match) {
     return { id: r['ID'], date: r['Fecha'], match: false, label: 'Entrenamiento', type: '', session: 'Entrenamiento',
       title: r['Notas'] || '', time: r['Hora'] || '', meet: '', season: r['Temporada'] || '', deadline: r['Responder antes'] || '',
-      off: offOf(r), offReason: offOf(r) ? r['Motivo'] || '' : '', row: r };
+      off: offOf(r), offReason: offOf(r) ? r['Motivo'] || '' : '', truce: isTrue(r['Sin multa tarde']), row: r };
   }
   // Anything that is not a friendly or a tournament is a league match, also an empty Tipo typed by hand.
   const kind = KINDS.slice(1).find(k => k[1] === r['Tipo']) || KINDS[1];
@@ -214,7 +236,7 @@ function dayOf(r, match) {
     // "Aplazado" lives in off, so taking it back leaves the match as it was.
     status: offOf(r) ? '' : r['Estado'] || '', season: r['Temporada'] || '', deadline: r['Responder antes'] || '',
     round: String(r['Jornada'] || '').trim(),
-    off: offOf(r), offReason: offOf(r) ? r['Motivo'] || '' : '', row: r,
+    off: offOf(r), offReason: offOf(r) ? r['Motivo'] || '' : '', truce: isTrue(r['Sin multa tarde']), row: r,
   };
 }
 function allDays() {

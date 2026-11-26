@@ -8,44 +8,93 @@ function viewHome() {
   const upcoming = all.filter(d => d.date >= t).sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
   let h = '';
   if (!me) h += '<p class="small">Tu cuenta no está unida a ningún jugador. Pide a la directiva que ponga tu Jugador ID en la pestaña Usuarios.</p>';
-  // What the player still owes in fines, to be paid before the next match.
-  const owed = me ? fines(f => f.player === me).reduce((s, f) => s + f.rest, 0) : 0;
   const meRow = me ? rows('Jugadores').find(r => r['ID'] === me) : null;
   const meCoach = isCoach(meRow);
+  // Each day carries an anchor, so a pending line can bring it into view.
+  const card = (d, hero) => '<div id="day-' + esc(d.id) + '">' + dayCard(d, me, meCoach, hero) + '</div>';
   // A postponed match is not the next one: it waits for its new date.
   const nextMatch = upcoming.find(d => d.match && !d.off && d.gf === '');
-  // The first day still without my answer, if it is not the match: right at the top, so nobody forgets.
-  const toAnswer = me ? upcoming.find(d => d !== nextMatch && !d.off && !noticeOf(d.id, me) && canAnswer(d, me, meCoach)) : null;
-  // Always on top: the next match, then how I am doing, then what is left to do (in orange).
-  if (nextMatch) h += dayCard(nextMatch, me, meCoach, true);
-  if (owed > 0) h += '<div class="card"><span class="bold warn">Llevas ' + money(owed) + ' sin pagar en multas. Págalas antes del próximo partido.</span></div>';
+  // Right on top, in red, only when there is something: what is left to do.
+  h += pendingCard(pendingList());
+  // Then the next match, then how I am doing.
+  if (nextMatch) h += card(nextMatch, true);
   if (me) h += attendanceCard(me);
   if (meCoach) h += coachCard(me);
-  h += todoCard(todoList());
-  if (toAnswer) h += '<h2>Te falta responder</h2>' + dayCard(toAnswer, me, meCoach, false);
   // Matches still being voted, where this player was called up.
-  if (me) allDays().filter(d => voteOpen(d) && squad(d).includes(me)).forEach(d => { h += voteCard(d, me); });
-  h += birthdayCard();
-  const rest = upcoming.filter(d => d !== nextMatch && d !== toAnswer);
+  if (me) allDays().filter(d => voteOpen(d) && squad(d).includes(me)).forEach(d => { h += '<div id="day-vote-' + esc(d.id) + '">' + voteCard(d, me) + '</div>'; });
+  // The coming days: only the next training, the matches a week ahead; the rest, folded.
+  const rest = upcoming.filter(d => d !== nextMatch);
   if (rest.length) h += '<h2>Próximos días</h2>';
   if (!upcoming.length) h += '<p class="small">No hay nada apuntado todavía.</p>';
-  const fold = splitUpcoming(rest, [nextMatch, toAnswer].filter(Boolean));
-  fold.shown.forEach(d => { h += dayCard(d, me, meCoach, false); });
+  const fold = homeWindow(rest, [nextMatch].filter(Boolean));
+  fold.shown.forEach(d => { h += card(d, false); });
   if (fold.folded.length) {
-    h += '<button class="btn wide mt" data-act="foldDays">' + (S.allDays ? 'Ocultar los demás días ▴' : 'Ver ' + fold.folded.length + ' días más ▾') + '</button>';
-    if (S.allDays) fold.folded.forEach(d => { h += dayCard(d, me, meCoach, false); });
+    h += '<button class="btn wide mt" data-act="foldDays">' + (S.allDays ? 'Ocultar el calendario ▴' : 'Ver calendario completo (' + fold.folded.length + ' días más) ▾') + '</button>';
+    if (S.allDays) fold.folded.forEach(d => { h += card(d, false); });
   }
+  h += birthdayCard();
   const played = all.filter(d => d.match && d.date < t && d.gf !== '').sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
   if (played.length) {
     h += '<h2>Últimos resultados</h2>';
-    played.forEach(d => {
+    // Only the last one shows; the earlier ones, folded, a tap away.
+    (S.allHomeResults ? played : played.slice(0, 1)).forEach(d => {
       const goals = rows('Acta').filter(x => x['Partido ID'] === d.id && x['Tipo'] === 'Gol').map(x => playerName(x['Jugador ID']));
       const mvps = rows('Acta').filter(x => x['Partido ID'] === d.id && x['Tipo'] === 'MVP').map(x => playerName(x['Jugador ID']));
       h += '<div class="card"><div class="title">' + esc(TEAM + ' ' + d.gf + ' – ' + d.ga + ' ' + d.title) + '</div>'
         + '<div class="small">' + esc([fdate(d.date), goals.length ? 'Goles: ' + goals.join(', ') : '', mvps.length ? 'MVP: ' + mvps.join(' y ') + ' ⭐' : '', ledText(d.id)].filter(Boolean).join(' · ')) + '</div></div>';
     });
+    if (played.length > 1) h += '<button class="btn wide" data-act="foldResults">' + (S.allHomeResults ? 'Ver solo el último ▴' : 'Ver ' + (played.length - 1) + ' resultados más ▾') + '</button>';
   }
   return h;
+}
+
+/** Inicio's coming days: only the next training (even with more planned), the matches up to a week ahead, and always the first match. Same as the app's HomePlan.window. */
+function homeWindow(rest, above) {
+  const firsts = splitUpcoming(rest, above).shown;
+  const x = new Date(today() + 'T12:00:00'); x.setDate(x.getDate() + 7);
+  const limit = ymd(x);
+  const shown = rest.filter(d => firsts.includes(d) || (d.match && d.date <= limit));
+  return { shown: shown, folded: rest.filter(d => !shown.includes(d)) };
+}
+
+/**
+ * Everything left to do, as the red card lists it: the days to answer on Inicio, the MVP vote, unpaid
+ * fines and, for the staff, their tasks. Same as the app's HomePlan.pending.
+ */
+function pendingList() {
+  const me = S.yo && S.yo.jugadorId;
+  const out = [];
+  if (me && editable()) {
+    const t = today();
+    const meCoach = isCoach(rows('Jugadores').find(r => r['ID'] === me));
+    const upcoming = days(activeSeason()).filter(d => d.date >= t).sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+    const nextMatch = upcoming.find(d => d.match && !d.off && d.gf === '');
+    const shown = [nextMatch].filter(Boolean).concat(homeWindow(upcoming.filter(d => d !== nextMatch), [nextMatch].filter(Boolean)).shown)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    shown.filter(d => !d.off && !noticeOf(d.id, me) && canAnswer(d, me, meCoach))
+      .forEach(d => out.push({ text: 'Responder: ' + dayTitle(d) + ' · ' + shortDay(d.date), go: 'day-' + d.id }));
+    const vote = allDays().find(d => voteOpen(d) && squad(d).includes(me) && !myVote(d.id, me));
+    if (vote) out.push({ text: 'Votar el MVP: ' + dayTitle(vote), go: 'day-vote-' + vote.id });
+    const owed = fines(f => f.player === me).reduce((s, f) => s + f.rest, 0);
+    if (owed > 0) out.push({ text: 'Multas sin pagar: ' + money(owed) + '. Págalas antes del próximo partido.' });
+  }
+  todoList().forEach(x => out.push({ text: x.text, day: x.day }));
+  return out;
+}
+
+/** In red, on top of Inicio, only when there is something. A day to answer scrolls to it; a task opens where it is done. */
+function pendingCard(list) {
+  if (!list.length) return '';
+  return '<div class="card pending"><div class="bold">❗ Pendiente (' + list.length + ')</div>'
+    + list.map(x => x.go ? '<button class="todo-line" data-act="goTo" data-go="' + esc(x.go) + '"><span>' + esc(x.text) + '</span><span class="arrow">›</span></button>'
+      : x.day !== undefined ? '<button class="todo-line" data-act="todo" data-day="' + esc(x.day) + '"><span>' + esc(x.text) + '</span><span class="arrow">›</span></button>'
+        : '<div class="todo-line"><span>' + esc(x.text) + '</span></div>').join('') + '</div>';
+}
+
+/** The count for Inicio's tab: a red dot with how many things are left. */
+function pendingBadge() {
+  const n = pendingList().length;
+  return n ? ' <span class="badge">' + n + '</span>' : '';
 }
 
 /** Before the squad is confirmed anyone can answer, which helps the coach pick it; after, in a match only the squad (and the coaches). */
@@ -663,7 +712,7 @@ function leagueTable() {
 /** "Inicio" for the player: the home and the league table, one tap apart. */
 function viewInicio() {
   S.homeTab = S.homeTab || 'inicio';
-  return '<div class="chips">' + [['inicio', 'Inicio'], ['liga', 'Clasificación']].map(x => '<button class="btn' + (S.homeTab === x[0] ? ' on' : '') + '" data-act="homeTab" data-sub="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>'
+  return '<div class="chips">' + [['inicio', 'Inicio' + pendingBadge()], ['liga', 'Clasificación']].map(x => '<button class="btn' + (S.homeTab === x[0] ? ' on' : '') + '" data-act="homeTab" data-sub="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>'
     + (S.homeTab === 'liga' ? viewLeague() : viewHome());
 }
 
