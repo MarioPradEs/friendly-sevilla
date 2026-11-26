@@ -2,6 +2,8 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
+<!-- Second barrier: even if some text slipped through unescaped, no foreign script could run or send data elsewhere. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; img-src 'self' data: https:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Friendly Sevilla Club</title>
 <meta name="theme-color" content="#111111">
@@ -144,6 +146,8 @@ a.btn { display: inline-block; text-decoration: none; }
 .fold { display: block; background: none; border: 0; padding: 0; margin: 14px 0 8px; font-size: 18px; font-weight: 600; color: var(--text); }
 .fold:disabled { opacity: 1; }
 .todo { background: #ffe0b2; color: #3e2723; padding-bottom: 6px; }
+.pending { background: #f9dedc; color: #410e0b; padding-bottom: 6px; }
+.badge { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 10px; background: #b3261e; color: #fff; font-size: 12px; line-height: 20px; text-align: center; }
 .todo-line { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; text-align: left; background: none; border: 0; border-top: 1px solid var(--line); padding: 10px 0; margin-top: 6px; }
 .box { width: 40px; height: 40px; flex-shrink: 0; border-radius: 8px; border: 1px solid var(--line); background: transparent; padding: 0; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
 .box.ok.on { background: #2e7d32; border-color: #2e7d32; color: #fff; }
@@ -208,9 +212,9 @@ dialog.search #searchQ { flex: 1; }
 <dialog id="dlg"></dialog>
 
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="js/core.js?v=46"></script>
-<script src="js/portal.js?v=46"></script>
-<script src="js/club.js?v=46"></script>
-<script src="js/main.js?v=46"></script>
+<script src="js/core.js?v=47"></script>
+<script src="js/portal.js?v=47"></script>
+<script src="js/club.js?v=47"></script>
+<script src="js/main.js?v=47"></script>
 </body>
 </html>
