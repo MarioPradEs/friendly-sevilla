@@ -1,37 +1,38 @@
 'use strict';
-/** What each version brought, newest first, for the directiva. Add a line here with every change. */
+/** What each version brought, newest first, for whoever has "Novedades". Add a line here with every change. */
 const CHANGELOG = [
-  ["0.30.0", "26/11/2026", ["Permisos por casillas: cada persona tiene solo lo que se le marca (pasar lista, convocar, acta, multas, cuentas…), con lo que da cada una", "App: panel Accesos (Ajustes): activar cuentas, enlazarlas con su jugador y dar o quitar permisos", "Inicio: lo pendiente en rojo arriba y con número en la pestaña", "Inicio: solo el siguiente entreno y el último resultado; el resto, plegado", "Seguridad: lo escrito que parezca una fórmula se guarda como texto", "Tregua por día: el retraso se apunta pero no se multa (quien pone multas la activa en la lista)"]],
-  ["0.29.3", "25/11/2026", ["App: Modo developer (solo Mario): ver la app como directiva, entrenador, lista, jugador o portero"]],
-  ["0.29.2", "25/11/2026", ["Convocatoria: el dorsal de cada jugador al lado de su nombre"]],
-  ["0.29.1", "25/11/2026", ["Clasificación: elige la jornada que quieres ver, o todas de la más reciente a la más antigua", "Las jornadas por jugar enseñan sus partidos y fechas"]],
-  ["0.29.0", "25/11/2026", ["Jornadas: los 6 partidos de cada jornada, el nuestro también, con su fecha y sus goles", "Nuestro partido de la jornada sale en Días para la convocatoria, la lista y el acta", "Clasificación por jornada: la última jugada, con aviso de los partidos sin resultado", "El calendario oficial numera las jornadas"]],
-  ["0.28.2", "25/11/2026", ["Clasificación: resultados de toda la jornada de una vez", "Voy / Tarde / No voy sin color hasta que eliges uno", "Buscador: la ficha ya no se vuelve a abrir al cambiar de sección", "Inicio: solo el próximo partido y el próximo entreno, el resto con «Ver más»", "Clasificación: solo la última jornada y aviso de los que no tienen resultado"]],
-  ["0.28.1", "24/11/2026", ["Gastos: categoría Entrenador y lo pagado al entrenador en Cuentas", "Inicio: próximo partido arriba, luego tus estadísticas y los pendientes en naranja"]],
-  ["0.28.0", "24/11/2026", ["Calendario de liga con ida y vuelta", "Aplazar partidos y suspender entrenos", "Al cambiar la fecha, borrar respuestas y avisar al grupo", "Buscador para la directiva y el entrenador", "Versiones de prueba (solo directiva)"]],
-  ["0.27.1", "24/11/2026", ["Clasificación: aviso de los partidos de liga jugados a los que les falta el resultado"]],
-  ["0.27.0", "24/11/2026", ["Nueva pestaña Clasificación en Inicio: la tabla de la liga con nuestros partidos del acta y los resultados de los demás equipos, que mete la directiva."]],
-  ["0.26.0", "23/11/2026", ["Lista «Quién viene» en cada día", "Entrenador en la plantilla", "Quién dirigió y banquillo en el acta", "Estadísticas del entrenador", "Aviso si el entrenador no puede ir", "Notas privadas del entrenador", "Plazo para responder", "Voy / Tarde / No voy en una fila", "El próximo partido, una sola vez", "Días: primero lo que viene", "Convocar de un toque a los que van", "Confirmar y enviar la convocatoria a la vez", "«Quedamos a las» para la hora de quedar", "Votar el MVP más tarde", "Nuevo día con formulario corto", "Pasar lista en una fila por jugador", "Acta: goleador con un toque", "Plantilla única", "Barra inferior para directiva y entrenador", "Lista de pendientes en Inicio", "Se ve qué se puede pulsar"]],
-  ["0.25.1", "23/11/2026", ["En la plantilla, primero jugador o portero y luego la posición"]],
-  ["0.25.0", "23/11/2026", ["Porteros por parte en el acta", "Goles en contra por portero", "Estadísticas de portero en el portal", "Partes y partidos a cero de cada portero"]],
-  ["0.24.0", "22/11/2026", ["Botón «Asistiré»", "Jugadores y porteros que van", "Recordatorio por WhatsApp", "Aviso «Ningún portero ha dicho que va»", "Aviso de multas sin pagar en el portal", "Pasar lista según avisos", "Asistencia y racha en el portal", "Estadísticas en el portal", "Cumpleaños", "Cómo llegar en entrenos y partidos", "Próximo partido destacado", "Votación del MVP (obligatoria tras el partido)", "Top 3 de votos para elegir el MVP", "Novedades y cambios"]],
-  ["0.23.0", "22/11/2026", ["Tarjeta con o sin multa", "Desplegables", "Rival «Otro equipo»"]],
+  ["0.31.1", "27/11/2026", ["Ajustes en los permisos", "Formación en el próximo partido"]],
+  ["0.30.0", "26/11/2026", ["Nuevo sistema de permisos", "Inicio más claro", "Mejoras de seguridad", "Ajustes en las multas"]],
+  ["0.29.3", "25/11/2026", ["Mejoras internas"]],
+  ["0.29.2", "25/11/2026", ["Dorsal en la convocatoria"]],
+  ["0.29.1", "25/11/2026", ["Elegir la jornada en la clasificación", "Las jornadas por jugar muestran sus partidos"]],
+  ["0.29.0", "25/11/2026", ["Jornadas completas con todos los partidos", "Clasificación por jornada"]],
+  ["0.28.2", "25/11/2026", ["Mejoras en la clasificación", "Mejoras en Inicio y en el buscador", "Respuestas más claras"]],
+  ["0.28.1", "24/11/2026", ["Ajustes en las cuentas", "Inicio reordenado"]],
+  ["0.28.0", "24/11/2026", ["Calendario de liga con ida y vuelta", "Aplazar partidos y suspender entrenos", "Aviso al grupo cuando cambia una fecha", "Buscador", "Mejoras internas"]],
+  ["0.27.1", "24/11/2026", ["Aviso de partidos sin resultado"]],
+  ["0.27.0", "24/11/2026", ["Clasificación de la liga en Inicio", "Resultados de los demás equipos", "Los partidos de liga cuentan solos desde el acta"]],
+  ["0.26.0", "23/11/2026", ["«Quién viene» en cada día", "Entrenador en la plantilla", "Mejoras en el acta", "Estadísticas del entrenador", "Plazo para responder", "Convocatoria más rápida", "Pasar lista más rápido", "Votar el MVP más tarde", "Nuevo día con formulario corto", "Barra inferior con todo a mano", "Lista de pendientes en Inicio"]],
+  ["0.25.1", "23/11/2026", ["Ajustes en la plantilla"]],
+  ["0.25.0", "23/11/2026", ["Porteros en el acta", "Estadísticas de portero"]],
+  ["0.24.0", "22/11/2026", ["Botón «Asistiré»", "Quién va a cada día", "Recordatorio por WhatsApp", "Avisos en el portal", "Asistencia, racha y estadísticas", "Cumpleaños", "Cómo llegar", "Votación del MVP", "Novedades y cambios"]],
+  ["0.23.0", "22/11/2026", ["Tarjetas en el acta", "Desplegables", "Rival «Otro equipo»"]],
   ["0.22.1", "22/11/2026", ["La app abre en el portal del jugador"]],
-  ["0.22.0", "22/11/2026", ["Engranaje de ajustes", "Lápiz para editar la plantilla"]],
-  ["0.21.3", "22/11/2026", ["Arreglo de sincronización al cerrar sesión"]],
+  ["0.22.0", "22/11/2026", ["Engranaje de ajustes", "Editar la plantilla más fácil"]],
+  ["0.21.3", "22/11/2026", ["Arreglo de sincronización"]],
   ["0.21.2", "22/11/2026", ["Arreglo de descarga en Android 8 y 9"]],
-  ["0.21.1", "22/11/2026", ["Aviso de versión nueva", "Descarga de la app desde la web"]],
+  ["0.21.1", "22/11/2026", ["Aviso de versión nueva", "Descarga desde la web"]],
   ["0.20.2", "22/11/2026", ["Pantalla de carga con reintentar"]],
-  ["0.20.1", "22/11/2026", ["Botón «Mi portal de jugador»"]],
+  ["0.20.1", "22/11/2026", ["Acceso rápido al portal del jugador"]],
   ["0.20.0", "22/11/2026", ["Solicitudes de acceso"]],
-  ["0.19.1", "22/11/2026", ["Web para iPhone", "El entrenador solo ve multas"]],
-  ["0.19.0", "22/11/2026", ["Rol «Lista»", "Confirmar antes de borrar"]],
-  ["0.18.0", "22/11/2026", ["Temporadas", "Pagos a plazos y saldo a favor", "Multas en la ficha del jugador", "Entrenamientos de toda la temporada", "Ranking", "Añadir al calendario", "Recordatorio de pagos", "Avisos apuntados por la directiva", "Equipaciones de portero"]],
-  ["0.17.1", "21/11/2026", ["Equipación en el portal del jugador"]],
+  ["0.19.1", "22/11/2026", ["Web para iPhone", "Ajustes en los permisos"]],
+  ["0.19.0", "22/11/2026", ["Ajustes en los permisos", "Confirmar antes de borrar"]],
+  ["0.18.0", "22/11/2026", ["Temporadas", "Pagos a plazos", "Multas en la ficha", "Entrenamientos de toda la temporada", "Ranking", "Añadir al calendario", "Recordatorio de pagos", "Avisos", "Equipaciones de portero"]],
+  ["0.17.1", "21/11/2026", ["Equipación en el portal"]],
   ["0.17.0", "21/11/2026", ["Equipación del partido", "Confirmar convocatoria", "Convocatoria por WhatsApp"]],
   ["0.16.1", "21/11/2026", ["Local / Visitante"]],
-  ["0.16.0", "21/11/2026", ["App Friendly Sevilla Club", "Entrada con Google", "Avisos «No puedo ir» y «Llego tarde»", "Acta del partido", "Perfil del jugador", "Cargos y pagos por jugador", "Rival desde la hoja"]],
-  ["0.15.0", "21/11/2026", ["Conexión con la hoja de la directiva", "Portal del jugador", "Pestaña Cuentas", "Convocatoria de 18"]]];
+  ["0.16.0", "21/11/2026", ["App Friendly Sevilla Club", "Entrada con Google", "Avisos «No puedo ir» y «Llego tarde»", "Acta del partido", "Perfil del jugador", "Pagos por jugador", "Rival desde la hoja"]],
+  ["0.15.0", "21/11/2026", ["Conexión con la hoja del club", "Portal del jugador", "Cuentas", "Convocatoria"]]];
 // Navigation by role, sign-in, dialogs and the wiring of every button to its action.
 
 const PORTAL = { inicio: viewHome, liga: viewLeague, pagos: viewMoney, perfil: viewProfile };
@@ -70,7 +71,8 @@ function render() {
   if (!S.token) return;
   renderStatus(); renderNav();
   // Only the directiva follows what changes from version to version.
-  $('news').classList.toggle('hidden', ROLE() !== 'Directiva');
+  // Whoever has "Novedades" ticked; the developer always.
+  $('news').classList.toggle('hidden', !(has('Novedades') || (S.yo && S.yo.jugadorId === 'J025')));
   // The search is for the staff: actions, days and players one tap away.
   $('search').classList.toggle('hidden', !can.search());
   document.body.classList.toggle('wide', can.club());

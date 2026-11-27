@@ -479,10 +479,55 @@ function nextMatchHead(d) {
   const when = [names[dt.getDay()] + ' ' + dt.getDate() + '/' + (dt.getMonth() + 1), d.time || 'hora por confirmar', d.meet ? 'quedamos a las ' + d.meet : ''].filter(Boolean).join(' · ');
   const g = groundOf(d);
   const kit = matchKits().find(k => k.name === d.kit);
-  return '<div class="row between"><span class="gold small bold">PRÓXIMO ' + esc(d.label.toUpperCase()) + '</span><span class="pill">' + count + '</span></div>'
-    + '<div class="match-title">' + esc(title) + '</div><div class="gold">' + esc(when) + '</div>'
+  // The coach may show the shape of his board: on the right, beside the details.
+  const shown = rows('Acta').find(x => x['Partido ID'] === d.id && x['Tipo'] === 'Formación visible');
+  const pitch = shown ? formationSvg(String(shown['Notas'] || '').trim()) : '';
+  const details = '<div class="match-title">' + esc(title) + '</div><div class="gold">' + esc(when) + '</div>'
     + (g.ground ? '<div class="small">📍 ' + esc(g.ground) + '</div>' : '')
     + (kit ? '<div class="small">👕 ' + esc(kit.name) + '</div>' : '');
+  return '<div class="row between"><span class="gold small bold">PRÓXIMO ' + esc(d.label.toUpperCase()) + '</span><span class="pill">' + count + '</span></div>'
+    + (pitch ? '<div class="match-body"><div class="grow">' + details + '</div>' + pitch + '</div>' : details);
+}
+
+// ---------- The formation the coach shows: only its shape, a dot per spot ----------
+/**
+ * Spots of a system, the goalkeeper first, x from the left and y from our goal (0 to 1): a usual
+ * one, "4-4-2", spreads each line across; the coach's own one, "Name|x,y;…", has all eleven.
+ * The same as the app's LineupPlan.spots.
+ */
+function formationSpots(system) {
+  if (system.indexOf('|') >= 0) {
+    const pts = system.split('|')[1].split(';').map(p => p.split(',').map(Number));
+    if (pts.length !== 11 || pts.some(p => p.length < 2 || p.some(isNaN))) return [];
+    return pts.map(p => [Math.min(Math.max(p[0], 0), 1), Math.min(Math.max(p[1], 0), 1)]);
+  }
+  const lines = system.split('-').map(n => Number(n.trim()));
+  if (!lines.length || lines.some(n => !Number.isInteger(n) || n < 1 || n > 6)) return [];
+  const out = [[0.5, 0.1]];
+  lines.forEach((count, line) => {
+    const y = 0.22 + line * (0.7 / lines.length);
+    for (let i = 0; i < count; i++) out.push([(i + 1) / (count + 1), y]);
+  });
+  return out;
+}
+
+/** A small pitch with the dots; a usual system with its name underneath, the coach's own without. */
+function formationSvg(system) {
+  const spots = formationSpots(system);
+  if (!spots.length) return '';
+  const w = 90, h = 100, m = 3, bw = w * 0.56, bh = h * 0.14;
+  const line = 'fill="none" stroke="rgba(255,255,255,.7)" stroke-width="1"';
+  const svg = '<svg viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '" role="img" aria-label="Formación">'
+    + '<rect width="' + w + '" height="' + h + '" rx="6" fill="#2E7D32"/>'
+    + '<rect x="' + m + '" y="' + m + '" width="' + (w - 2 * m) + '" height="' + (h - 2 * m) + '" ' + line + '/>'
+    + '<line x1="' + m + '" y1="' + h / 2 + '" x2="' + (w - m) + '" y2="' + h / 2 + '" ' + line + '/>'
+    + '<circle cx="' + w / 2 + '" cy="' + h / 2 + '" r="' + w * 0.13 + '" ' + line + '/>'
+    + '<rect x="' + (w - bw) / 2 + '" y="' + m + '" width="' + bw + '" height="' + bh + '" ' + line + '/>'
+    + '<rect x="' + (w - bw) / 2 + '" y="' + (h - m - bh) + '" width="' + bw + '" height="' + bh + '" ' + line + '/>'
+    + spots.map(s => '<circle cx="' + (s[0] * w).toFixed(1) + '" cy="' + ((1 - s[1]) * h).toFixed(1) + '" r="4" fill="#fff"/>').join('')
+    + '</svg>';
+  const name = system.indexOf('|') < 0 ? '<div class="bold formation-name">' + esc(system) + '</div>' : '';
+  return '<div class="formation">' + svg + name + '</div>';
 }
 
 // ---------- MVP vote: secret, never oneself, the match day and the next ----------
